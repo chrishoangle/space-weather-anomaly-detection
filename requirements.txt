@@ -7,4 +7,5 @@ requests
 python-dateutil
 streamlit
 jupyter
+pytest
 
