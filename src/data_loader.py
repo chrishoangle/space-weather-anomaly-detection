@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timedelta, timezone
+from html import unescape
 from pathlib import Path
 from typing import Any, Final, Mapping, Sequence
 
@@ -24,9 +26,90 @@ PLASMA_URL: Final = "https://services.swpc.noaa.gov/products/solar-wind/plasma-7
 # as a fallback so the loader remains useful if the seven-day product moves.
 PLASMA_FALLBACK_URL: Final = "https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json"
 KP_URL: Final = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
+OMNIWEB_URL: Final = "https://omniweb.gsfc.nasa.gov/cgi/nx1.cgi"
 DEFAULT_CACHE_TTL: Final = timedelta(hours=1)
 DEFAULT_TIMEOUT_SECONDS: Final = 20
 DEFAULT_CACHE_DIR: Final = Path(__file__).resolve().parents[1] / "data" / "raw"
+
+
+def fetch_omniweb_historical(
+    start_date: datetime,
+    end_date: datetime,
+    resolution: str = "hourly",
+) -> pd.DataFrame:
+    """Fetch historical OMNI2 solar-wind and Kp observations from NASA OMNIWeb.
+
+    Parameters are retrieved through NASA SPDF's `OMNIWeb Plus interface
+    <https://omniweb.gsfc.nasa.gov/cgi/nx1.cgi>`_ for the inclusive date
+    range.  The returned UTC-indexed frame has ``speed`` (km/s), ``density``
+    (protons/cm³), ``temperature`` (K), ``imf_magnitude`` (nT), and ``Kp``.
+    Raw ASCII replies are cached under ``data/raw/omniweb`` by date range.
+
+    OMNI2 is an hourly, multi-spacecraft near-Earth/L1 compilation; its
+    L1 data are time-shifted to estimated magnetospheric arrival times. Kp is
+    a three-hour index repeated in hourly records. OMNIWeb supplies it as
+    ``Kp * 10`` and this function converts it to conventional Kp units.
+    OMNI fill values (for example 999.9, 9999, 9999999, and 99) are returned
+    as ``NaN``.  ``resolution`` currently supports ``"hourly"`` only because
+    the requested OMNI2 variables are the standard hourly product.
+
+    Raises:
+        ValueError: If dates or resolution are invalid.
+        RuntimeError: If OMNIWeb cannot be reached or returns an unusable
+            response.
+    """
+    if not isinstance(start_date, datetime) or not isinstance(end_date, datetime):
+        raise ValueError("start_date and end_date must be datetime instances")
+    if start_date > end_date:
+        raise ValueError("start_date must be on or before end_date")
+    if resolution != "hourly":
+        raise ValueError("Only resolution='hourly' is supported for OMNI2 historical data")
+
+    start = start_date.date()
+    end = end_date.date()
+    cache_path = (
+        DEFAULT_CACHE_DIR
+        / "omniweb"
+        / f"omni2_{resolution}_{start:%Y%m%d}_{end:%Y%m%d}.txt"
+    )
+    raw_response = _read_omniweb_cache(cache_path)
+    if raw_response is None:
+        # OMNIWeb accepts one ``vars`` form field per selected variable.  The
+        # historical nx1.cgi selector IDs are 08=scalar IMF, 23=density,
+        # 22=temperature, 24=speed, and 38=Kp (the public table's physical
+        # record-word numbers are offset for the plasma fields). Keep this
+        # sequence aligned with the response columns parsed below.
+        form_data: list[tuple[str, str]] = [
+            ("activity", "retrieve"),
+            ("res", "hour"),
+            ("spacecraft", "omni2"),
+            ("start_date", start.strftime("%Y%m%d")),
+            ("end_date", end.strftime("%Y%m%d")),
+            *(("vars", variable) for variable in ("08", "23", "22", "24", "38")),
+        ]
+        try:
+            response = requests.post(OMNIWEB_URL, data=form_data, timeout=DEFAULT_TIMEOUT_SECONDS)
+            response.raise_for_status()
+        except requests.RequestException as error:
+            raise RuntimeError(
+                "OMNIWeb historical-data request failed for "
+                f"{start.isoformat()} through {end.isoformat()} at {OMNIWEB_URL}: {error}"
+            ) from error
+        raw_response = response.text
+        if not raw_response.strip() or _omniweb_response_is_error(raw_response):
+            raise RuntimeError(
+                "OMNIWeb returned no usable historical data for "
+                f"{start.isoformat()} through {end.isoformat()}."
+            )
+        _write_omniweb_cache(cache_path, raw_response)
+
+    frame = _parse_omniweb_response(raw_response)
+    if frame.empty:
+        raise RuntimeError(
+            "OMNIWeb response contained no parseable hourly records for "
+            f"{start.isoformat()} through {end.isoformat()}."
+        )
+    return frame
 
 
 def load_solar_wind_plasma(
@@ -79,6 +162,93 @@ def load_kp_index(
         session=session,
     )
     return _to_time_frame(payload)
+
+
+def _read_omniweb_cache(cache_path: Path) -> str | None:
+    """Return a raw OMNIWeb response, ignoring a missing or unreadable cache."""
+    try:
+        return cache_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        LOGGER.warning("Could not read OMNIWeb cache %s: %s", cache_path, error)
+        return None
+
+
+def _write_omniweb_cache(cache_path: Path, raw_response: str) -> None:
+    """Persist a successful raw OMNIWeb response without masking download success."""
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary_path = cache_path.with_suffix(cache_path.suffix + ".tmp")
+        temporary_path.write_text(raw_response, encoding="utf-8")
+        temporary_path.replace(cache_path)
+    except OSError as error:
+        LOGGER.warning("Could not write OMNIWeb cache %s: %s", cache_path, error)
+
+
+def _omniweb_response_is_error(raw_response: str) -> bool:
+    """Identify common CGI error pages before caching them as data."""
+    text = unescape(re.sub(r"<[^>]+>", " ", raw_response)).lower()
+    return "internal server error" in text or "error processing" in text
+
+
+def _parse_omniweb_response(raw_response: str) -> pd.DataFrame:
+    """Parse OMNIWeb's HTML-wrapped ASCII listing into standard columns."""
+    text = unescape(re.sub(r"<[^>]+>", " ", raw_response))
+    rows: list[tuple[pd.Timestamp, list[float]]] = []
+    for line in text.splitlines():
+        values = re.findall(r"[-+]?\d+(?:\.\d+)?(?:[Ee][-+]?\d+)?", line)
+        if len(values) < 8 or not re.match(r"^\s*\d{4}\s+", line):
+            continue
+        numbers = [float(value) for value in values]
+        year = int(numbers[0])
+        second = int(numbers[1])
+        try:
+            # OMNI2 listings use year, day-of-year, and hour.  Supporting a
+            # calendar-date response as well makes the parser resilient to
+            # minor OMNIWeb presentation changes.
+            if 1 <= second <= 366 and 0 <= int(numbers[2]) <= 23:
+                timestamp = pd.Timestamp(year=year, month=1, day=1, tz="UTC") + pd.Timedelta(
+                    days=second - 1, hours=int(numbers[2])
+                )
+                metrics = numbers[3:8]
+            elif 1 <= second <= 12 and 1 <= int(numbers[2]) <= 31 and 0 <= int(numbers[3]) <= 23:
+                timestamp = pd.Timestamp(
+                    year=year, month=second, day=int(numbers[2]), hour=int(numbers[3]), tz="UTC"
+                )
+                metrics = numbers[4:9]
+            else:
+                continue
+        except ValueError:
+            continue
+        if len(metrics) == 5:
+            rows.append((timestamp, metrics))
+
+    columns = ["imf_magnitude", "density", "temperature", "speed", "Kp"]
+    if not rows:
+        empty_index = pd.DatetimeIndex([], name="time_tag", tz="UTC")
+        return pd.DataFrame(
+            columns=["speed", "density", "temperature", "imf_magnitude", "Kp"],
+            index=empty_index,
+        )
+
+    frame = pd.DataFrame([metrics for _, metrics in rows], columns=columns)
+    frame.index = pd.DatetimeIndex([timestamp for timestamp, _ in rows], name="time_tag")
+    # Field-specific sentinels documented by OMNI2.  The threshold comparison
+    # also safely covers equivalent all-9 fill values rendered with a variant
+    # decimal precision by the CGI listing.
+    for column, threshold in {
+        "imf_magnitude": 999.0,
+        "density": 999.0,
+        "temperature": 999999.0,
+        "speed": 9999.0,
+    }.items():
+        frame.loc[frame[column].abs() >= threshold, column] = float("nan")
+    frame.loc[frame["Kp"].abs() >= 99, "Kp"] = float("nan")
+    frame["Kp"] = frame["Kp"] / 10.0
+    return frame[["speed", "density", "temperature", "imf_magnitude", "Kp"]].loc[
+        lambda data: ~data.index.duplicated(keep="last")
+    ].sort_index()
 
 
 def _get_payload(
