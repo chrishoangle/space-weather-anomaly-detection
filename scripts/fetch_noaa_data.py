@@ -3,13 +3,12 @@
 Run from the project root with: ``python scripts/fetch_noaa_data.py``.
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.data_loader import load_kp_index, load_solar_wind_plasma
-
 
 if __name__ == "__main__":
     print("Solar wind plasma:")

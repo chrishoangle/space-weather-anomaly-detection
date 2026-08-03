@@ -1,0 +1,16 @@
+# Ground-truth geomagnetic storm catalog used for detector validation.
+#
+# peak_utc  : time of maximum disturbance, UTC. Sourced from NOAA SWPC event
+#             summaries and the NOAA/NCEI Kp index record.
+# max_kp    : peak planetary K index for the event.
+# onset_utc : shock arrival / sudden storm commencement. LEFT BLANK ON PURPOSE.
+#             Filling this in from NOAA SWPC event reports is a real research
+#             task -- see ROADMAP.md Milestone 2. Lead-time metrics are only
+#             meaningful once onset is populated.
+# class     : NOAA G-scale storm class (G1 minor ... G5 extreme).
+name,onset_utc,peak_utc,max_kp,class,notes
+Bastille Day,,2000-07-15 00:00,9,G5,Fast halo CME; strong SEP event
+Halloween Storms,,2003-10-29 06:00,9,G5,Multiple X-class flares from AR 10486
+St. Patrick's Day,,2015-03-17 22:00,8,G4,Largest storm of solar cycle 24 to that date
+September 2017,,2017-09-08 01:00,8,G4,Followed X9.3 flare on 2017-09-06
+Gannon Storm,,2024-05-10 18:00,9,G5,Multiple CMEs from AR 3664; visible aurora to low latitudes

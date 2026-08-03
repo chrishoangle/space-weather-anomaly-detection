@@ -7,3 +7,9 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 
+# Local Claude Code settings (machine-specific, not shared)
+.claude/settings.local.json
+
+# Scratch transfer archives
+data/raw/_transfer*.tar.gz
+data/raw/_stale/

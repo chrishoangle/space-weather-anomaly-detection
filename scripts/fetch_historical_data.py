@@ -3,19 +3,18 @@
 Run from the project root with: ``python scripts/fetch_historical_data.py``.
 """
 
-from datetime import datetime, timezone
-from pathlib import Path
 import sys
+from datetime import UTC, datetime
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.data_loader import fetch_omniweb_historical
 
-
 if __name__ == "__main__":
     storm_data = fetch_omniweb_historical(
-        datetime(2015, 3, 15, tzinfo=timezone.utc),
-        datetime(2015, 3, 20, tzinfo=timezone.utc),
+        datetime(2015, 3, 15, tzinfo=UTC),
+        datetime(2015, 3, 20, tzinfo=UTC),
     )
     peak_time = storm_data["Kp"].idxmax()
     print(f"Records fetched: {len(storm_data)}")

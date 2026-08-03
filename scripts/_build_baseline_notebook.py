@@ -13,7 +13,6 @@ from pathlib import Path
 import nbformat
 from nbclient import NotebookClient
 
-
 NOTEBOOK_PATH = Path(__file__).resolve().parents[1] / "notebooks" / "03_baseline_detection.ipynb"
 
 

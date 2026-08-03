@@ -1,11 +1,14 @@
-pandas
-numpy
-scikit-learn
-matplotlib
-plotly
-requests
-python-dateutil
-streamlit
-jupyter
-pytest
+# Runtime dependencies for the data pipeline, models, and dashboard.
+# Lower bounds only: these are the minimum versions the code is written
+# against. Run `pip freeze > requirements-lock.txt` in your local venv when
+# you want a byte-exact reproduction of a specific result.
 
+pandas>=2.2
+numpy>=1.26
+scikit-learn>=1.4
+scipy>=1.11
+matplotlib>=3.8
+plotly>=5.18
+requests>=2.31
+python-dateutil>=2.9
+streamlit>=1.30

@@ -9,11 +9,10 @@ state.  They are designed to compose on the UTC-indexed frames returned by
 
 from __future__ import annotations
 
-from typing import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
-
 
 DEFAULT_STORM_COLUMNS: tuple[str, ...] = (
     "speed",

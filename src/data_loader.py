@@ -10,14 +10,14 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime, timedelta
 from html import unescape
 from pathlib import Path
-from typing import Any, Final, Mapping, Sequence
+from typing import Any, Final
 
 import pandas as pd
 import requests
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -308,8 +308,8 @@ def _cache_is_fresh(cache: Mapping[str, Any], cache_ttl: timedelta) -> bool:
     try:
         fetched_at = datetime.fromisoformat(str(cache["fetched_at"]))
         if fetched_at.tzinfo is None:
-            fetched_at = fetched_at.replace(tzinfo=timezone.utc)
-        return datetime.now(timezone.utc) - fetched_at <= cache_ttl
+            fetched_at = fetched_at.replace(tzinfo=UTC)
+        return datetime.now(UTC) - fetched_at <= cache_ttl
     except (TypeError, ValueError):
         return False
 
@@ -319,7 +319,7 @@ def _write_cache(cache_path: Path, payload: Any) -> None:
     try:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         temporary_path = cache_path.with_suffix(cache_path.suffix + ".tmp")
-        envelope = {"fetched_at": datetime.now(timezone.utc).isoformat(), "payload": payload}
+        envelope = {"fetched_at": datetime.now(UTC).isoformat(), "payload": payload}
         with temporary_path.open("w", encoding="utf-8") as cache_file:
             json.dump(envelope, cache_file)
         temporary_path.replace(cache_path)
@@ -389,4 +389,10 @@ def _normalise_records(payload: Any) -> list[dict[str, Any]]:
     if not isinstance(header, Sequence) or isinstance(header, (str, bytes)):
         return []
     columns = [str(column) for column in header]
-    return [dict(zip(columns, row)) for row in rows if isinstance(row, Sequence) and not isinstance(row, (str, bytes))]
+    return [
+        # strict=False: NOAA occasionally returns short rows; truncating to the
+        # shared prefix is preferable to raising on a partial record.
+        dict(zip(columns, row, strict=False))
+        for row in rows
+        if isinstance(row, Sequence) and not isinstance(row, (str, bytes))
+    ]
