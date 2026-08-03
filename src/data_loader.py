@@ -53,7 +53,7 @@ def load_solar_wind_plasma(
         session=session,
         fallback_url=PLASMA_FALLBACK_URL,
     )
-    return _to_time_frame(payload)
+    return _normalise_plasma_columns(_to_time_frame(payload))
 
 
 def load_kp_index(
@@ -178,6 +178,28 @@ def _to_time_frame(payload: Any) -> pd.DataFrame:
     for column in frame.columns:
         frame[column] = pd.to_numeric(frame[column], errors="coerce")
     return frame[~frame.index.duplicated(keep="last")].sort_index()
+
+
+def _normalise_plasma_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Return standard plasma metric names across NOAA product schemas.
+
+    NOAA's seven-day product uses ``density``, ``speed``, and
+    ``temperature``, while the real-time fallback identifies these proton
+    measurements as ``proton_density``, ``proton_speed``, and
+    ``proton_temperature``.  Preserve an already-standard column when both
+    variants are present.
+    """
+    aliases = {
+        "proton_density": "density",
+        "proton_speed": "speed",
+        "proton_temperature": "temperature",
+    }
+    rename_map = {
+        source: target
+        for source, target in aliases.items()
+        if source in frame.columns and target not in frame.columns
+    }
+    return frame.rename(columns=rename_map)
 
 
 def _normalise_records(payload: Any) -> list[dict[str, Any]]:
