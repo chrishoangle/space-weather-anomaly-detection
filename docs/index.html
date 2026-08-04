@@ -4,7 +4,27 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Space Weather Anomaly Detection, Christopher Le</title>
-<meta name="description" content="Detecting geomagnetic storms in NASA and NOAA solar-wind data, and why a 3-sigma baseline beat Isolation Forest.">
+<meta name="description" content="Detecting geomagnetic storms in NASA and NOAA solar-wind data, and why a 3-sigma statistical baseline beat Isolation Forest across all five major storms since 2000.">
+
+<!-- Social preview. Without these a shared link renders as an untitled grey
+     box on LinkedIn, Slack and iMessage. og:image must be an absolute URL. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Christopher Le">
+<meta property="og:title" content="The simple model won: anomaly detection in solar wind data">
+<meta property="og:description" content="A 3-sigma baseline beat Isolation Forest on precision and false-alarm rate across 3,696 hours and five major geomagnetic storms. The reason generalises to any rare-event monitoring problem.">
+<meta property="og:url" content="https://chrishoangle.github.io/space-weather-anomaly-detection/">
+<meta property="og:image" content="https://chrishoangle.github.io/space-weather-anomaly-detection/preview.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Solar wind speed over March 2015 with detector flags marked in red, alongside the headline result: baseline precision 0.394 against Isolation Forest 0.254.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The simple model won: anomaly detection in solar wind data">
+<meta name="twitter:description" content="A 3-sigma baseline beat Isolation Forest across 3,696 hours and five major geomagnetic storms.">
+<meta name="twitter:image" content="https://chrishoangle.github.io/space-weather-anomaly-detection/preview.png">
+<link rel="canonical" href="https://chrishoangle.github.io/space-weather-anomaly-detection/">
+
+<!-- Inline SVG favicon: a sun and a flare, no extra request. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d1424'/%3E%3Ccircle cx='11' cy='16' r='6' fill='%23eda100'/%3E%3Cpath d='M19 9c5 3 5 11 0 14' stroke='%23e34948' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
   :root {
     color-scheme: light;
@@ -119,16 +139,18 @@
   .bar:hover { filter: brightness(1.12); }
   .bar-value { font-variant-numeric: tabular-nums; font-weight: 650; text-align: right; }
   .tip {
-    position: absolute; left: 100%; top: 50%; transform: translate(10px,-50%);
-    background: var(--text-primary); color: var(--page); padding: 7px 11px;
-    border-radius: 7px; font-size: .78rem; white-space: nowrap; opacity: 0;
-    pointer-events: none; transition: opacity .12s; z-index: 5; line-height: 1.5;
+    display: none; position: absolute; right: 0; bottom: 100%;
+    margin-bottom: 7px; background: var(--text-primary); color: var(--page);
+    padding: 7px 11px; border-radius: 7px; font-size: .78rem;
+    pointer-events: none; z-index: 5; line-height: 1.5; width: max-content;
+    max-width: min(280px, 60vw);
   }
-  .bar:hover .tip { opacity: 1; }
+  .bar:hover .tip { display: block; }
   .axis { display: flex; justify-content: space-between; font-size: .74rem;
           color: var(--text-muted); margin: 10px 0 0 187px; font-variant-numeric: tabular-nums; }
 
   details { margin-top: 18px; }
+  details > table { display: block; overflow-x: auto; }
   summary { cursor: pointer; font-size: .85rem; color: var(--text-secondary); }
   table { border-collapse: collapse; width: 100%; margin-top: 12px; font-size: .82rem; }
   th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
@@ -168,6 +190,17 @@
   .panel .ptitle { fill: var(--text-secondary); font-weight: 650; font-size: 12px; }
   .xaxis { display: flex; justify-content: space-between; font-size: .75rem;
            color: var(--text-muted); padding: 4px 12px 0 54px; }
+  #panels { position: relative; }
+  .chart-tip {
+    position: absolute; pointer-events: none; z-index: 6;
+    background: var(--text-primary); color: var(--page); padding: 9px 12px;
+    border-radius: 8px; font-size: .78rem; line-height: 1.6; width: max-content;
+    max-width: min(260px, 70vw); box-shadow: 0 2px 12px rgba(0,0,0,.18);
+  }
+  .chart-tip b { font-variant-numeric: tabular-nums; }
+  .chart-tip .hit { color: #ff9c9c; font-weight: 650; }
+  .panel .cross { stroke: var(--text-muted); stroke-width: 1;
+                  stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
   @media (prefers-color-scheme: dark) {
     :root:where(:not([data-theme="light"])) .panel .band { fill: #22364f; }
   }
@@ -179,7 +212,7 @@
     .bar-row { grid-template-columns: 1fr; gap: 4px; }
     .bar-label { text-align: left; }
     .axis { margin-left: 0; }
-    .tip { left: auto; right: 0; transform: translate(0,-140%); }
+    .tip { max-width: 78vw; }
   }
 </style>
 </head>
@@ -711,11 +744,72 @@
     html += '<div class="xaxis"><span>' + d0.toLocaleDateString("en-GB", opt) +
             "</span><span>" + d1.toLocaleDateString("en-GB", opt) + " (UTC)</span></div>";
     el("panels").innerHTML = html;
+    el("tip").hidden = true;
+    attachHover();
   }
 
   function selectStorm() {
     storm = data.storms[parseInt(el("c-storm").value, 10)];
     render();
+  }
+
+  // Crosshair and tooltip. An HTML chart is interactive by default, so the
+  // reader should be able to read values off it rather than estimate them.
+  function attachHover() {
+    var host = el("panels"), tip = el("tip");
+    var svgs = host.querySelectorAll("svg.panel");
+    if (!svgs.length) return;
+
+    function move(ev) {
+      var rec = storm, n = rec.t.length;
+      var box = svgs[0].getBoundingClientRect();
+      var L = 54 / 1000, R = 12 / 1000;             // viewBox margins as fractions
+      var x0 = box.left + box.width * L, x1 = box.right - box.width * R;
+      var frac = (ev.clientX - x0) / (x1 - x0);
+      if (frac < 0 || frac > 1) { hide(); return; }
+      var i = Math.round(frac * (n - 1));
+      if (i < 0 || i >= n) { hide(); return; }
+
+      var det = el("c-det").value, sigma = parseFloat(el("c-sigma").value);
+      var flag = flags(rec, det, sigma)[i];
+      var when = new Date(rec.t[i] * 1000).toISOString().slice(0, 16).replace("T", " ");
+      var rows = rec.features.map(function (f) {
+        var v = rec.raw[f][i];
+        return f + ": <b>" + (v === null ? "n/a" : v) + "</b>";
+      });
+      rows.push("Kp: <b>" + (rec.Kp[i] === null ? "n/a" : rec.Kp[i]) + "</b>");
+      if (flag) rows.push('<span class="hit">flagged as anomalous</span>');
+      tip.innerHTML = when + " UTC<br>" + rows.join("<br>");
+      tip.hidden = false;
+
+      var hostBox = host.getBoundingClientRect();
+      var tx = ev.clientX - hostBox.left + 14;
+      if (tx + tip.offsetWidth > hostBox.width) tx = ev.clientX - hostBox.left - tip.offsetWidth - 14;
+      tip.style.left = Math.max(0, tx) + "px";
+      tip.style.top = Math.max(0, ev.clientY - hostBox.top + 12) + "px";
+
+      var px = 54 + frac * (1000 - 54 - 12);
+      svgs.forEach(function (svg) {
+        var line = svg.querySelector(".cross");
+        if (!line) {
+          line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          line.setAttribute("class", "cross");
+          line.setAttribute("y1", 0); line.setAttribute("y2", svg.viewBox.baseVal.height);
+          svg.appendChild(line);
+        }
+        line.setAttribute("x1", px); line.setAttribute("x2", px);
+        line.style.display = "";
+      });
+    }
+
+    function hide() {
+      tip.hidden = true;
+      host.querySelectorAll(".cross").forEach(function (l) { l.style.display = "none"; });
+    }
+
+    host.addEventListener("mousemove", move);
+    host.addEventListener("mouseleave", hide);
+    host.addEventListener("touchstart", function () { hide(); }, { passive: true });
   }
 
   fetch("storms.json").then(function (r) {
