@@ -144,6 +144,14 @@ def plot(frame: pd.DataFrame, flags: pd.Series, shade: tuple | None) -> go.Figur
     if shade is not None:
         start, end = shade
         for row in range(1, rows + 1):
+            # Label once, on the top panel only. The annotation kwargs must be
+            # omitted entirely for the other rows: passing annotation_text=None
+            # still creates an annotation and Plotly labels it "new text".
+            annotation = (
+                {"annotation_text": "ground-truth window", "annotation_position": "top left"}
+                if row == 1
+                else {}
+            )
             figure.add_vrect(
                 x0=start,
                 x1=end,
@@ -152,10 +160,7 @@ def plot(frame: pd.DataFrame, flags: pd.Series, shade: tuple | None) -> go.Figur
                 line_width=0,
                 row=row,
                 col=1,
-                # Label once, on the top panel only: repeating it on every
-                # subplot is noise.
-                annotation_text="ground-truth window" if row == 1 else None,
-                annotation_position="top left",
+                **annotation,
             )
 
     figure.update_layout(height=190 * rows, margin={"l": 60, "r": 20, "t": 50, "b": 40},

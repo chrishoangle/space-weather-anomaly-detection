@@ -199,6 +199,22 @@ The OMNI2 responses for all five storm windows are committed under
 `data/raw/omniweb/` (~170 KB), so the dashboard and every result in
 `RESULTS.md` reproduce with no network access.
 
+### Explainer page and browser dashboard
+
+`docs/index.html` also carries a fully client-side version of the dashboard.
+Detector outputs are precomputed by `scripts/export_web_data.py` into
+`docs/storms.json` (126 KB gzipped), and the storm picker, sigma threshold and
+hit tolerance are applied in the browser. Since neither slider requires
+refitting, no server is involved, which is what allows an interactive tool to
+run on GitHub Pages. All 180 storm and detector and threshold combinations were
+verified to match `src/evaluation.py` exactly.
+
+Regenerate the export after any change to the detectors:
+
+```bash
+python scripts/export_web_data.py
+```
+
 ### Explainer page
 
 `docs/index.html` is a self-contained page explaining what space weather is, why
