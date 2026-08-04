@@ -237,7 +237,7 @@ def _plot(windows: list[tuple[StormEvent, pd.DataFrame]]) -> None:
             axis.text(
                 0.995,
                 0.86,
-                f"{label} — {int(flags.sum())} of {len(flags)} flagged",
+                f"{label}: {int(flags.sum())} of {len(flags)} flagged",
                 transform=axis.transAxes,
                 ha="right",
                 va="top",
@@ -249,8 +249,8 @@ def _plot(windows: list[tuple[StormEvent, pd.DataFrame]]) -> None:
 
         axes[-1].set_xlabel("UTC time")
         fig.suptitle(
-            f"{event.name} ({event.peak:%Y-%m-%d}) — detector flags vs. "
-            f"storm window (shaded, ±24 h of peak)",
+            f"{event.name} ({event.peak:%Y-%m-%d}): detector flags vs. "
+            f"storm window (shaded, +/-24 h of peak)",
             fontsize=11,
         )
         fig.tight_layout()

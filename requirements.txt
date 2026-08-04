@@ -11,4 +11,4 @@ matplotlib>=3.8
 plotly>=5.18
 requests>=2.31
 python-dateutil>=2.9
-streamlit>=1.30
+streamlit>=1.49        # width="stretch" API; use_container_width is removed

@@ -6,8 +6,8 @@ Run locally with::
 
 Two modes:
 
-*   **Live** — pulls current NOAA SWPC data and scores it. Requires network.
-*   **Historical** — scores a catalogued storm window from OMNI2, with the
+*   **Live**: pulls current NOAA SWPC data and scores it. Requires network.
+*   **Historical**: scores a catalogued storm window from OMNI2, with the
     ground-truth window shaded so detections can be judged by eye against the
     metrics in ``RESULTS.md``.
 
@@ -166,7 +166,7 @@ def plot(frame: pd.DataFrame, flags: pd.Series, shade: tuple | None) -> go.Figur
 st.title("Space Weather Anomaly Detection")
 st.caption(
     "Unsupervised anomaly detection on NOAA SWPC and NASA OMNI2 solar-wind data. "
-    "Measured precision is 0.17–0.39 depending on configuration — see RESULTS.md. "
+    "Measured precision is 0.17 to 0.39 depending on configuration; see RESULTS.md. "
     "Not an operational forecast; for real alerts use NOAA SWPC."
 )
 
@@ -193,7 +193,7 @@ tolerance = pd.Timedelta(hours=tolerance_hours)
 try:
     if mode == "Historical storm":
         labels = {
-            f"{event.name} — {event.peak:%Y-%m-%d} (Kp {event.max_kp:.0f})"
+            f"{event.name}, {event.peak:%Y-%m-%d} (Kp {event.max_kp:.0f})"
             + ("  ·  cached" if is_cached(event.peak) else ""): event
             for event in events
         }
@@ -237,7 +237,7 @@ columns[2].metric(
 last_label = "Anomaly now" if mode == "Live (NOAA)" else "Flagged at window end"
 columns[3].metric(last_label, "Yes" if bool(flags.iloc[-1]) else "No")
 
-st.plotly_chart(plot(frame, flags, shade), use_container_width=True)
+st.plotly_chart(plot(frame, flags, shade), width="stretch")
 
 if mode == "Historical storm":
     st.subheader("Evaluation against the storm catalog")

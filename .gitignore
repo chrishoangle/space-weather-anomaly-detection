@@ -1,6 +1,15 @@
 venv/
-data/raw/
+
+# Everything cached under data/raw/ is disposable EXCEPT the OMNI2 text
+# responses. Those are the exact upstream bytes the published results were
+# computed from, they total ~170 KB, and committing them means a fresh clone
+# (and the deployed dashboard) reproduces RESULTS.md with no network access.
+data/raw/*
+!data/raw/omniweb/
+data/raw/omniweb/*
+!data/raw/omniweb/*.txt
 data/processed/
+
 .env
 __pycache__/
 *.pyc
@@ -9,7 +18,3 @@ __pycache__/
 
 # Local Claude Code settings (machine-specific, not shared)
 .claude/settings.local.json
-
-# Scratch transfer archives
-data/raw/_transfer*.tar.gz
-data/raw/_stale/

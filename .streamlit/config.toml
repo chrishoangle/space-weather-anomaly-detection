@@ -1,0 +1,14 @@
+# Committed so the deployed app and local runs look identical.
+[theme]
+base = "light"
+primaryColor = "#c0392b"          # matches the crimson anomaly markers
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f4f5f7"
+textColor = "#1f2328"
+
+[server]
+# The app is read-only over public data; no uploads are accepted.
+maxUploadSize = 1
+
+[browser]
+gatherUsageStats = false
