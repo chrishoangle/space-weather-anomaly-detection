@@ -1,19 +1,19 @@
 {
   "status": "ok",
-  "generated_at": "2026-08-04T09:06:53+00:00",
-  "message": "Scored 2246 samples; 30 flagged.",
-  "latest_sample": "2026-08-04T09:00:08+00:00",
-  "data_age_hours": 0.11,
-  "n_samples": 2246,
-  "n_flagged": 30,
-  "flagged_fraction": 0.0134,
-  "latest_kp": 3.0,
+  "generated_at": "2026-08-05T08:52:13+00:00",
+  "message": "Scored 2252 samples; 33 flagged.",
+  "latest_sample": "2026-08-05T08:48:00+00:00",
+  "data_age_hours": 0.07,
+  "n_samples": 2252,
+  "n_flagged": 33,
+  "flagged_fraction": 0.0147,
+  "latest_kp": 0.67,
   "storm_class": "quiet to unsettled",
   "active_now": false,
   "peak_zscores": {
-    "speed": 36.61,
-    "density": 36.66,
-    "temperature": 4.39
+    "speed": 25.93,
+    "density": 25.96,
+    "temperature": 9.5
   },
   "driving_features": []
 }
