@@ -2,27 +2,27 @@
 
 **Status: ANOMALY**. Detector is firing on the most recent sample
 
-_Generated 2026-08-07T07:40:32+00:00 by `scripts/run_daily_detection.py`._
+_Generated 2026-08-08T07:13:51+00:00 by `scripts/run_daily_detection.py`._
 
 | Field | Value |
 | --- | --- |
-| Newest sample | 2026-08-07T07:35:08+00:00 |
-| Data age | 0.09 h |
-| Samples scored | 2624 |
-| Samples flagged | 568 (21.6%) |
-| Latest Kp | 0.33 |
+| Newest sample | 2026-08-08T07:08:08+00:00 |
+| Data age | 0.1 h |
+| Samples scored | 2607 |
+| Samples flagged | 442 (17.0%) |
+| Latest Kp | 1.67 |
 | Storm class | quiet to unsettled |
-| Driving features | density |
+| Driving features | speed, density, temperature |
 
 Peak |z| over the window:
 
 | Feature | Peak abs z-score |
 | --- | --- |
-| density | 13.16 |
-| speed | 3.67 |
-| temperature | 5.02 |
+| density | 10.91 |
+| speed | 12.79 |
+| temperature | 20.13 |
 
-> Scored 2624 samples; 568 flagged.
+> Scored 2607 samples; 442 flagged.
 
 ---
 
