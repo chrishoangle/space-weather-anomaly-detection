@@ -1,27 +1,28 @@
 # Space Weather: Latest Automated Detection
 
-**Status: UNKNOWN**. Upstream data unavailable or stale
+**Status: ANOMALY**. Detector is firing on the most recent sample
 
-_Generated 2026-09-01T11:37:40+00:00 by `scripts/run_daily_detection.py`._
+_Generated 2026-09-02T11:16:33+00:00 by `scripts/run_daily_detection.py`._
 
 | Field | Value |
 | --- | --- |
-| Newest sample | 2026-09-01T02:05:00+00:00 |
-| Data age | 9.54 h |
-| Samples scored | 2316 |
-| Samples flagged | 16 (0.7%) |
-| Latest Kp | 1.0 |
+| Newest sample | 2026-09-02T11:11:06+00:00 |
+| Data age | 0.09 h |
+| Samples scored | 2293 |
+| Samples flagged | 142 (6.2%) |
+| Latest Kp | 2.33 |
 | Storm class | quiet to unsettled |
+| Driving features | density |
 
 Peak |z| over the window:
 
 | Feature | Peak abs z-score |
 | --- | --- |
-| density | 15.3 |
-| speed | 10.17 |
-| temperature | 21.95 |
+| density | 17.18 |
+| speed | 14.84 |
+| temperature | 39.0 |
 
-> Newest sample is 9.5 h old, beyond the 6:00:00 staleness limit; treating current conditions as unknown.
+> Scored 2293 samples; 142 flagged.
 
 ---
 
