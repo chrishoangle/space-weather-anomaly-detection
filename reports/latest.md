@@ -1,28 +1,27 @@
 # Space Weather: Latest Automated Detection
 
-**Status: ANOMALY**. Detector is firing on the most recent sample
+**Status: NOMINAL**. No anomaly on the most recent sample
 
-_Generated 2026-09-15T11:42:47+00:00 by `scripts/run_daily_detection.py`._
+_Generated 2026-09-16T11:30:10+00:00 by `scripts/run_daily_detection.py`._
 
 | Field | Value |
 | --- | --- |
-| Newest sample | 2026-09-15T11:38:00+00:00 |
-| Data age | 0.08 h |
-| Samples scored | 2587 |
-| Samples flagged | 631 (24.4%) |
-| Latest Kp | 0.33 |
+| Newest sample | 2026-09-16T11:24:00+00:00 |
+| Data age | 0.1 h |
+| Samples scored | 2455 |
+| Samples flagged | 64 (2.6%) |
+| Latest Kp | 2.33 |
 | Storm class | quiet to unsettled |
-| Driving features | speed, temperature |
 
 Peak |z| over the window:
 
 | Feature | Peak abs z-score |
 | --- | --- |
-| density | 5.62 |
-| speed | 29.51 |
-| temperature | 71.29 |
+| density | 7.5 |
+| speed | 3.43 |
+| temperature | 6.16 |
 
-> Scored 2587 samples; 631 flagged.
+> Scored 2455 samples; 64 flagged.
 
 ---
 
