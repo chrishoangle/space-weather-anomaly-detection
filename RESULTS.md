@@ -8,10 +8,21 @@ enough restraint to be operationally meaningful, and whether a machine-learning
 detector outperforms a conventional statistical baseline on that task.
 
 Across all five catalogued storms, every detector configuration flagged every
-storm. Detection is therefore not the discriminating problem. On precision and
-on quiet-time false-alarm rate, the 3-sigma statistical process control (SPC)
-baseline outperforms Isolation Forest in every configuration tested, and the
-margin widens in the most geomagnetically disturbed window.
+storm. Detection is therefore not the discriminating problem. On precision and on
+quiet-time false-alarm rate, the 3-sigma statistical process control (SPC)
+baseline outperforms Isolation Forest in every configuration tested at default
+settings.
+
+However, the two detectors were not operating at comparable alert budgets. When
+the baseline threshold is tuned per window to flag the same number of hours as
+Isolation Forest, the mean precision advantage falls from 0.141 to 0.048, the
+paired t-test moves from p = 0.013 to p = 0.306, and the baseline wins three of
+five windows rather than five of five. Approximately two thirds of the headline
+advantage is an operating-point artifact. Section 4.6 reports this in full.
+
+The defensible conclusion is that the statistical baseline held up, by a smaller
+margin than default settings suggested, on a sample too small to establish the
+difference decisively.
 
 To reproduce the results in this document:
 
@@ -75,9 +86,27 @@ centred on the storm peak rather than on shock arrival, and lead-time metrics
 return NaN throughout. Detection timing relative to storm onset is consequently
 not measured in this study.
 
-Finally, five events cannot support a tight interval on any of the means
-reported below. The per-window spread documented in Section 4.4 is large
-relative to the differences between configurations.
+Regarding independence, the hourly samples within a window are strongly
+autocorrelated. Measured decorrelation times range from 38 to 119 hours across the
+five windows, which places the effective number of independent observations near
+51 rather than 3,696. Any interval computed on the nominal row count is therefore
+too narrow by approximately a factor of eight.
+
+With respect to held-out evaluation, none exists. Every figure in this document is
+in-sample. The two Kp<3 configurations are scored for quiet-time false alarms on
+exactly the rows they were fitted to, and the calendar-half configuration overlaps
+its own training window by 43% to 72% depending on the event.
+
+Concerning the feature set, southward interplanetary magnetic field Bz is the
+controlling parameter for solar wind to magnetosphere coupling, and it is not used
+here. The project detects on scalar field magnitude instead. Consequently a
+structure with large field strength but northward Bz will be flagged, will produce
+no geomagnetic response, and will be scored as a false positive despite the
+detector having correctly identified an anomalous solar wind condition.
+
+Finally, five events cannot support a tight interval on any of the means reported
+below. The per-window spread documented in Section 4.4 is large relative to the
+differences between configurations.
 
 ---
 
@@ -222,32 +251,86 @@ configuration is preferable depends on the relative cost of a false alarm
 against a missed storm hour, which is a domain decision rather than a modelling
 one.
 
+### 4.6 Operating-point sensitivity
+
+Precision and recall trade against one another, so a detector flagging fewer hours
+will show higher precision independently of its quality. The four configurations
+were not flagging comparable numbers of hours.
+
+| Window | Isolation Forest flags | SPC at 3 sigma | Ratio |
+| --- | --- | --- | --- |
+| Bastille Day | 89 | 35 | 2.54 |
+| Halloween Storms | 71 | 85 | 0.84 |
+| St. Patrick's Day | 129 | 77 | 1.68 |
+| September 2017 | 90 | 36 | 2.50 |
+| Gannon Storm | 92 | 29 | 3.17 |
+
+The comparison was therefore re-run with the SPC threshold tuned per window so that
+it flags exactly as many hours as Isolation Forest in that window.
+
+| Window | n flagged | IF precision | SPC precision | sigma used | Leader |
+| --- | --- | --- | --- | --- | --- |
+| Bastille Day | 89 | 0.292 | 0.315 | 1.69 | SPC |
+| Halloween Storms | 71 | 0.113 | 0.296 | 3.57 | SPC |
+| St. Patrick's Day | 130 | 0.225 | 0.315 | 2.44 | SPC |
+| September 2017 | 90 | 0.356 | 0.300 | 2.21 | IF |
+| Gannon Storm | 92 | 0.283 | 0.283 | 1.37 | tie |
+
+Mean precision at matched flag rate is 0.302 for SPC against 0.254 for Isolation
+Forest, a gap of 0.048 with a paired t-test of p = 0.306. At default settings the
+same comparison gives 0.394 against 0.254, a gap of 0.141 at p = 0.013.
+
+Consequently about two thirds of the reported advantage is attributable to the
+operating point rather than to the detector. The remaining difference points in the
+same direction but is not statistically distinguishable from zero at five windows.
+
+The appropriate comparison would sweep the threshold for both detectors and report
+precision-recall curves or average precision. Isolation Forest exposes
+`score_samples`, so the curve is available; the current export ships only the
+boolean decision.
+
 ---
 
 ## 5. Discussion
 
-### 5.1 Failure behaviour under a shifted base rate
+### 5.1 Behaviour in the most disturbed window, and a hypothesis that failed
 
-The October 2003 window is the most informative case in the study. It is the
-hardest window for all four configurations, but the degradation is not uniform
-across detector families. SPC declines to F1 0.343 and 0.307, whereas Isolation
-Forest declines to 0.133 and 0.062. In the latter configuration, precision
-falls to 0.039.
+The October 2003 window is the hardest window in the study for all four
+configurations, and the degradation is not uniform across detector families. SPC
+declines to F1 0.343 and 0.307, whereas Isolation Forest declines to 0.133 and
+0.062. In the latter configuration, precision falls to 0.039.
 
-Considering the composition of that window, October 2003 records Kp >= 3 in
-54.0% of its hours, meaning the month is predominantly disturbed. This
-performance gap can be attributed to the way each detector defines normal
-behaviour. Isolation Forest infers normality from the distribution of the data
-supplied to it, so a predominantly disturbed month may cause disturbance itself
-to be treated as typical, which would suppress the model's ability to isolate
-it. SPC, by contrast, is anchored to an externally specified quiet reference,
-so its notion of normal is not displaced by the composition of the evaluation
-window.
+Considering the composition of that window, October 2003 records Kp >= 3 in 54.0%
+of its hours, meaning the month is predominantly disturbed. The natural explanation
+is base-rate shift. Isolation Forest infers normality from the distribution of the
+data supplied to it, so a predominantly disturbed month may cause disturbance itself
+to be treated as typical. SPC, by contrast, is anchored to an externally specified
+quiet reference.
 
-Ultimately this behaviour is not specific to space weather. Any unsupervised
-detector that defines anomalous as rare within its training distribution
-appears vulnerable to base-rate shift, which is precisely the regime in which a
-monitoring system is most needed.
+That explanation was tested across all five windows and the data does not support
+it.
+
+| Window | Kp >= 3 % | IF_all F1 | SPC_cal F1 | Gap (IF minus SPC) |
+| --- | --- | --- | --- | --- |
+| Gannon Storm | 22.2 | 0.369 | 0.410 | -0.041 |
+| St. Patrick's Day | 35.1 | 0.326 | 0.476 | -0.150 |
+| Bastille Day | 35.5 | 0.377 | 0.310 | +0.067 |
+| September 2017 | 36.7 | 0.460 | 0.329 | +0.131 |
+| Halloween Storms | 54.0 | 0.133 | 0.343 | -0.210 |
+
+The correlation between a window's disturbed fraction and the performance gap is
+Pearson r = -0.444 (p = 0.45) and Spearman r = -0.100 (p = 0.87). Furthermore, three
+windows at nearly identical disturbed fractions of 35.1%, 35.5% and 36.7% produce
+gaps of -0.150, +0.067 and +0.131. The scatter at matched base rate is therefore as
+large as the Halloween effect the mechanism was proposed to explain.
+
+Ultimately the mechanism rests on a single window being simultaneously the most
+disturbed and the worst for Isolation Forest. With five windows, one window must be
+the extreme on both axes, so that co-occurrence is weak evidence. The reasoning
+remains sound as theory, and an unsupervised detector defining anomalous as rare
+within its training distribution should be vulnerable to base-rate shift. This
+dataset does not demonstrate it, and it is reported here as an open hypothesis
+rather than as a finding.
 
 ### 5.2 Signal structure
 
@@ -269,16 +352,22 @@ detection. Across the five windows the flags are attributable predominantly to
 Isolation Forest returns a single opaque score. For an alerting application,
 the per-feature attribution is actionable in a way that the score is not.
 
-### 5.4 Counter-argument
+### 5.4 Counter-argument, and a withdrawal
 
-The under-labelling described in Section 2.1 depresses precision most severely
-in the most active windows, and Isolation Forest performs worst in exactly
-those windows. A portion of its October 2003 false positives may therefore
-correspond to genuine but unlabelled disturbance.
+The under-labelling described in Section 2.1 depresses precision most severely in
+the most active windows, and Isolation Forest performs worst in exactly those
+windows. A portion of its October 2003 false positives may therefore correspond to
+genuine but unlabelled disturbance.
 
-However, this consideration bears on the magnitude of the gap rather than its
-direction. In the quietest window evaluated, the Gannon storm at 22.2% Kp>=3,
-SPC on the calendar quiet half still leads on precision by 0.552 to 0.283.
+An earlier version of this document answered that objection by noting that the
+baseline leads even in the quietest window evaluated. That answer is withdrawn.
+Section 4.6 shows that at a matched alert budget the Gannon window is one of the two
+in which Isolation Forest is not beaten, so the quietest window does not support the
+argument it was offered for.
+
+The objection therefore stands against the magnitude of the gap. The direction of
+the remaining difference is unchanged, but its size is smaller than Section 4
+reported and its significance does not survive matching.
 
 ---
 
