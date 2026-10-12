@@ -199,6 +199,19 @@ The OMNI2 responses for all five storm windows are committed under
 `data/raw/omniweb/` (~170 KB), so the dashboard and every result in
 `RESULTS.md` reproduce with no network access.
 
+
+### Validation and review
+
+- `scripts/validate_heldout.py` runs leave-one-storm-out validation and a hit
+  tolerance sweep, removing the in-sample leakage and the single fixed operating
+  point that the main comparison carries. Results in `reports/heldout_validation.csv`
+  and `reports/tolerance_sweep.csv`, discussed in RESULTS.md sections 4.7 and 4.8.
+- `docs/METHODOLOGICAL_REVIEW.md` is an adversarial audit of this project's own
+  claims, including the two that were found to overstate the evidence and the
+  corrections applied.
+- `docs/EMPLOYER_FACING_POSITIONING.md` records how the public page is positioned
+  and why.
+
 ### Explainer page and browser dashboard
 
 `docs/index.html` also carries a fully client-side version of the dashboard.

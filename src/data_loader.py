@@ -27,6 +27,11 @@ PLASMA_URL: Final = "https://services.swpc.noaa.gov/products/solar-wind/plasma-7
 PLASMA_FALLBACK_URL: Final = "https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json"
 KP_URL: Final = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
 OMNIWEB_URL: Final = "https://omniweb.gsfc.nasa.gov/cgi/nx1.cgi"
+
+#: OMNI2 selector IDs requested from nx1.cgi, in response-column order.
+#: 08 = scalar IMF |B| (nT), 16 = Bz GSM (nT), 23 = proton density (cm^-3),
+#: 22 = proton temperature (K), 24 = bulk speed (km/s), 38 = Kp * 10.
+OMNI2_VARIABLES: Final = ("08", "16", "23", "22", "24", "38")
 DEFAULT_CACHE_TTL: Final = timedelta(hours=1)
 DEFAULT_TIMEOUT_SECONDS: Final = 20
 DEFAULT_CACHE_DIR: Final = Path(__file__).resolve().parents[1] / "data" / "raw"
@@ -42,7 +47,10 @@ def fetch_omniweb_historical(
     Parameters are retrieved through NASA SPDF's `OMNIWeb Plus interface
     <https://omniweb.gsfc.nasa.gov/cgi/nx1.cgi>`_ for the inclusive date
     range.  The returned UTC-indexed frame has ``speed`` (km/s), ``density``
-    (protons/cm³), ``temperature`` (K), ``imf_magnitude`` (nT), and ``Kp``.
+    (protons/cm³), ``temperature`` (K), ``imf_magnitude`` (nT), ``Kp``, and
+    ``bz_gsm`` (nT, GSM frame) when the response carries it. Responses cached
+    before Bz was requested parse without that column rather than with an
+    all-NaN one.
     Raw ASCII replies are cached under ``data/raw/omniweb`` by date range.
 
     OMNI2 is an hourly, multi-spacecraft near-Earth/L1 compilation; its
@@ -75,17 +83,26 @@ def fetch_omniweb_historical(
     raw_response = _read_omniweb_cache(cache_path)
     if raw_response is None:
         # OMNIWeb accepts one ``vars`` form field per selected variable.  The
-        # historical nx1.cgi selector IDs are 08=scalar IMF, 23=density,
-        # 22=temperature, 24=speed, and 38=Kp (the public table's physical
-        # record-word numbers are offset for the plasma fields). Keep this
-        # sequence aligned with the response columns parsed below.
+        # historical nx1.cgi selector IDs are 08=scalar IMF |B|, 16=Bz GSM,
+        # 23=density, 22=temperature, 24=speed, and 38=Kp (the public table's
+        # physical record-word numbers are offset for the plasma fields). Keep
+        # this sequence aligned with the response columns parsed below.
+        #
+        # Bz is requested because southward interplanetary magnetic field is
+        # the controlling parameter for solar wind to magnetosphere coupling,
+        # via dayside reconnection, which requires an antiparallel field. The
+        # scalar magnitude |B| alone cannot distinguish a large northward field
+        # that produces no geomagnetic response from a moderate southward field
+        # that drives a major storm. Detecting on |B| and scoring against Kp
+        # therefore mislabels some genuine solar wind structures as false
+        # alarms. See RESULTS.md section 2.1.
         form_data: list[tuple[str, str]] = [
             ("activity", "retrieve"),
             ("res", "hour"),
             ("spacecraft", "omni2"),
             ("start_date", start.strftime("%Y%m%d")),
             ("end_date", end.strftime("%Y%m%d")),
-            *(("vars", variable) for variable in ("08", "23", "22", "24", "38")),
+            *(("vars", variable) for variable in OMNI2_VARIABLES),
         ]
         try:
             response = requests.post(OMNIWEB_URL, data=form_data, timeout=DEFAULT_TIMEOUT_SECONDS)
@@ -211,20 +228,38 @@ def _parse_omniweb_response(raw_response: str) -> pd.DataFrame:
                 timestamp = pd.Timestamp(year=year, month=1, day=1, tz="UTC") + pd.Timedelta(
                     days=second - 1, hours=int(numbers[2])
                 )
-                metrics = numbers[3:8]
+                # Slice to the end rather than to a fixed width: a hard
+                # numbers[3:8] silently truncates the response to five values
+                # and would drop Bz entirely once it is requested.
+                metrics = numbers[3:]
             elif 1 <= second <= 12 and 1 <= int(numbers[2]) <= 31 and 0 <= int(numbers[3]) <= 23:
                 timestamp = pd.Timestamp(
                     year=year, month=second, day=int(numbers[2]), hour=int(numbers[3]), tz="UTC"
                 )
-                metrics = numbers[4:9]
+                metrics = numbers[4:]
             else:
                 continue
         except ValueError:
             continue
-        if len(metrics) == 5:
+        # Five values is the historical response shape, before Bz was
+        # requested. Six is the current shape. Both are accepted so that the
+        # OMNI2 files already cached under data/raw/omniweb/ keep parsing and
+        # every published result stays reproducible without a refetch.
+        if len(metrics) in (5, 6):
             rows.append((timestamp, metrics))
 
-    columns = ["imf_magnitude", "density", "temperature", "speed", "Kp"]
+    widths = {len(m) for _, m in rows}
+    if len(widths) > 1:
+        raise RuntimeError(
+            f"OMNIWeb response mixes {sorted(widths)} value columns per row, "
+            "which means the variable list and the parser have diverged."
+        )
+    has_bz = widths == {6}
+    columns = (
+        ["imf_magnitude", "bz_gsm", "density", "temperature", "speed", "Kp"]
+        if has_bz
+        else ["imf_magnitude", "density", "temperature", "speed", "Kp"]
+    )
     if not rows:
         empty_index = pd.DatetimeIndex([], name="time_tag", tz="UTC")
         return pd.DataFrame(
@@ -239,14 +274,23 @@ def _parse_omniweb_response(raw_response: str) -> pd.DataFrame:
     # decimal precision by the CGI listing.
     for column, threshold in {
         "imf_magnitude": 999.0,
+        "bz_gsm": 999.0,
         "density": 999.0,
         "temperature": 999999.0,
         "speed": 9999.0,
     }.items():
-        frame.loc[frame[column].abs() >= threshold, column] = float("nan")
+        if column in frame.columns:
+            frame.loc[frame[column].abs() >= threshold, column] = float("nan")
     frame.loc[frame["Kp"].abs() >= 99, "Kp"] = float("nan")
     frame["Kp"] = frame["Kp"] / 10.0
-    return frame[["speed", "density", "temperature", "imf_magnitude", "Kp"]].loc[
+    # bz_gsm is emitted only when the response actually carried it. Returning
+    # an all-NaN column for legacy cached files would silently poison any
+    # caller that selects features by dtype rather than by name.
+    ordered = ["speed", "density", "temperature", "imf_magnitude"]
+    if "bz_gsm" in frame.columns:
+        ordered.append("bz_gsm")
+    ordered.append("Kp")
+    return frame[ordered].loc[
         lambda data: ~data.index.duplicated(keep="last")
     ].sort_index()
 

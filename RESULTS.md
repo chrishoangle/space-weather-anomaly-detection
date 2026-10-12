@@ -92,14 +92,18 @@ five windows, which places the effective number of independent observations near
 51 rather than 3,696. Any interval computed on the nominal row count is therefore
 too narrow by approximately a factor of eight.
 
-With respect to held-out evaluation, none exists. Every figure in this document is
-in-sample. The two Kp<3 configurations are scored for quiet-time false alarms on
-exactly the rows they were fitted to, and the calendar-half configuration overlaps
-its own training window by 43% to 72% depending on the event.
+With respect to held-out evaluation, Sections 4.1 to 4.6 are in-sample: the two
+Kp<3 configurations are scored for quiet-time false alarms on exactly the rows they
+were fitted to, and the calendar-half configuration overlaps its own training window
+by 43% to 72% depending on the event. Section 4.7 repeats the comparison under a
+leave-one-storm-out protocol that removes this leakage, and the direction of the
+result is unchanged.
 
 Concerning the feature set, southward interplanetary magnetic field Bz is the
 controlling parameter for solar wind to magnetosphere coupling, and it is not used
-here. The project detects on scalar field magnitude instead. Consequently a
+in any result in this document. The loader now requests it (OMNI2 variable 16), but
+the committed windows were cached before that change and therefore carry no Bz
+column, so every figure here is still computed without it. The project detects on scalar field magnitude instead. Consequently a
 structure with large field strength but northward Bz will be flagged, will produce
 no geomagnetic response, and will be scored as a false positive despite the
 detector having correctly identified an anomalous solar wind condition.
@@ -288,6 +292,90 @@ The appropriate comparison would sweep the threshold for both detectors and repo
 precision-recall curves or average precision. Isolation Forest exposes
 `score_samples`, so the curve is available; the current export ships only the
 boolean decision.
+
+### 4.7 Held-out validation
+
+Sections 4.1 to 4.6 are in-sample. The quiet baseline is fitted inside the same
+window it is then scored on, and the two Kp<3 configurations are evaluated for
+quiet-time false alarms on exactly the rows they were fitted to.
+
+To remove that leakage, a leave-one-storm-out protocol was run. The quiet reference
+is estimated by pooling Kp<3 rows from the four windows the detector is not being
+scored on, then applied to the held-out fifth. No row contributes to both the
+baseline and its own evaluation. Every configuration is additionally evaluated at a
+matched alert budget, so the operating-point confound of Section 4.6 is controlled
+at the same time.
+
+| Configuration | Threshold | Precision | Recall | Quiet FAR | Flagged |
+| --- | --- | --- | --- | --- | --- |
+| SPC in-sample | default 3 sigma | 0.282 | 0.616 | 0.043 | 561 |
+| SPC in-sample | matched budget | 0.301 | 0.571 | 0.039 | 471 |
+| SPC held-out | default 3 sigma | 0.264 | 0.629 | 0.065 | 613 |
+| **SPC held-out** | **matched budget** | **0.327** | **0.620** | **0.044** | **472** |
+| Isolation Forest | contamination auto | 0.254 | 0.494 | 0.061 | 471 |
+
+Two results follow, and the first was not expected.
+
+**Held-out evaluation does not cost accuracy here. It slightly improves it.** At a
+matched budget the held-out baseline reaches precision 0.327 against 0.301
+in-sample, a difference of +0.026 (paired t p = 0.135). Recall moves from 0.571 to
+0.620. This suggests that pooling quiet rows across four windows yields a more
+stable estimate of the quiet mean and standard deviation than fitting on a single
+month, and that the gain from a larger quiet sample outweighs the loss from the
+reference no longer being contemporaneous with the event. That partially
+contradicts the rationale for per-window fitting given in Section 3, and it is worth
+noting that the rationale was reasoning rather than measurement.
+
+**With both leakage and the operating point controlled, the baseline still leads,
+but not significantly.** Against Isolation Forest at an identical alert budget, the
+held-out baseline leads on precision (+0.073, p = 0.162), on recall (+0.127,
+p = 0.108) and on quiet-time false-alarm rate (-0.017, p = 0.237), winning four of
+five windows on each. The Gannon window is an exact tie on every metric.
+
+| Window | Flags | SPC precision | IF precision | SPC recall | IF recall |
+| --- | --- | --- | --- | --- | --- |
+| Bastille Day | 89 | 0.315 | 0.292 | 0.571 | 0.531 |
+| Halloween Storms | 71 | 0.352 | 0.113 | 0.510 | 0.163 |
+| St. Patrick's Day | 130 | 0.285 | 0.225 | 0.755 | 0.592 |
+| September 2017 | 90 | 0.400 | 0.356 | 0.735 | 0.653 |
+| Gannon Storm | 92 | 0.283 | 0.283 | 0.531 | 0.531 |
+
+Consequently the direction reported in Section 4 survives the two corrections, and
+the baseline now leads on recall as well as precision rather than trading one for
+the other. None of the three differences reaches significance at five windows.
+
+Detailed results are provided in `reports/heldout_validation.csv`.
+
+### 4.8 Tolerance sensitivity
+
+The 24 hour hit tolerance is a second arbitrary operating point. Recall rises with
+tolerance for free, because a wider window converts misses into hits without the
+detector changing. Precision and recall were therefore swept from 6 to 48 hours.
+
+| Tolerance (h) | SPC precision | IF precision | SPC recall | IF recall |
+| --- | --- | --- | --- | --- |
+| 6 | 0.097 | 0.067 | 0.800 | 0.523 |
+| 12 | 0.168 | 0.130 | 0.720 | 0.512 |
+| 18 | 0.244 | 0.193 | 0.697 | 0.514 |
+| 24 | 0.282 | 0.254 | 0.616 | 0.494 |
+| 30 | 0.322 | 0.315 | 0.577 | 0.495 |
+| 36 | 0.356 | 0.363 | 0.542 | 0.477 |
+| 42 | 0.396 | 0.397 | 0.522 | 0.449 |
+| 48 | 0.433 | 0.418 | 0.503 | 0.416 |
+
+From the recall columns, the baseline leads at every tolerance tested, and the
+margin is widest at the tightest window: 0.800 against 0.523 at 6 hours. Precision
+behaves differently. The baseline leads at every tolerance up to 30 hours, the two
+converge at 36 and 42 hours, and the ordering is effectively tied there.
+
+Considering the direction of both columns together, the baseline's advantage is
+concentrated where detections must land close to the storm peak, which is the
+regime an operator would care about. However, the convergence above 30 hours means
+that a reader who prefers a looser tolerance would find the two detectors difficult
+to separate on precision alone. Quoting any single tolerance without this curve
+overstates how settled the comparison is.
+
+Detailed results are provided in `reports/tolerance_sweep.csv`.
 
 ---
 

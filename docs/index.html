@@ -494,6 +494,16 @@
         That is a weaker claim than the one I started with, and it is the one the
         data supports.
       </p>
+      <p>
+        I then removed the other source of leakage. Under a leave-one-storm-out
+        protocol, where the quiet reference is pooled from the four windows a
+        detector is <em>not</em> being scored on, the baseline leads Isolation
+        Forest on precision, recall and false-alarm rate at an identical alert
+        budget, in four of five windows. None of the three reaches significance at
+        n = 5. Held-out scoring also turned out to be slightly <em>better</em> than
+        in-sample, which suggests a larger pooled quiet sample beats a
+        contemporaneous one.
+      </p>
     </div>
   </div>
 </section>
@@ -505,6 +515,13 @@
       Pick a storm, pick a detector, and move the thresholds. Everything below
       recomputes in your browser. The shaded band is the real storm window, and
       each red mark is an hour the detector flagged.
+    </p>
+    <p>
+      Switch <strong>Threshold</strong> to <em>matched alert budget</em> to force
+      every detector to flag the same number of hours. That is the comparison that
+      removes the operating-point confound above, and it is the one worth looking
+      at: widen the budget and watch the differences between the four
+      configurations shrink.
     </p>
 
     <div class="controls" role="group" aria-label="Detector configuration">
@@ -521,9 +538,20 @@
           <option value="if_quiet">Isolation Forest, Kp&lt;3 rows</option>
         </select>
       </label>
+      <label class="ctl">
+        <span>Threshold</span>
+        <select id="c-mode">
+          <option value="default">Each detector's own default</option>
+          <option value="budget">Matched alert budget</option>
+        </select>
+      </label>
       <label class="ctl" id="ctl-sigma">
         <span>Sigma threshold <b id="v-sigma">3.0</b></span>
         <input id="c-sigma" type="range" min="1.5" max="6" step="0.1" value="3">
+      </label>
+      <label class="ctl" id="ctl-budget" hidden>
+        <span>Alert budget <b id="v-budget">120</b> hours</span>
+        <input id="c-budget" type="range" min="20" max="400" step="10" value="120">
       </label>
       <label class="ctl">
         <span>Hit tolerance <b id="v-tol">24</b> h</span>
@@ -550,6 +578,17 @@
       </div>
       <div id="panels"></div>
       <div id="tip" class="chart-tip" hidden></div>
+      <div id="budget-compare" hidden>
+        <div class="chart-title" style="margin-top:22px">All four configurations at this
+          identical alert budget</div>
+        <div class="chart-sub">Every detector is forced to flag the same number of hours,
+          so precision and recall can be compared directly. This is the comparison that
+          removes the operating-point confound.</div>
+        <table>
+          <thead><tr><th>Configuration</th><th>Flagged</th><th>Precision</th><th>Recall</th><th>Quiet FAR</th></tr></thead>
+          <tbody id="budget-rows"></tbody>
+        </table>
+      </div>
       <details>
         <summary>View the numbers as a table</summary>
         <table>
@@ -690,8 +729,8 @@
     <p>Known limitations, stated rather than buried:</p>
     <ul>
       <li><strong>Five events is a small validation set</strong>, and the hours inside each window are not independent. Measured decorrelation times of 38 to 119 hours put the effective sample size near 51 observations rather than 3,696.</li>
-      <li><strong>Every number here is in-sample.</strong> There is no held-out set, and two of the four configurations are scored for false alarms on rows they were fitted to.</li>
-      <li><strong>The feature set omits Bz.</strong> Southward interplanetary magnetic field is the controlling parameter for solar wind coupling, and this project uses scalar field strength instead. Some of what is counted as a false alarm may be a real solar wind structure that never coupled.</li>
+      <li><strong>The headline figures are in-sample</strong>, with two of four configurations scored for false alarms on rows they were fitted to. A leave-one-storm-out run removes that leakage and leaves the direction unchanged.</li>
+      <li><strong>The feature set omits Bz.</strong> Southward interplanetary magnetic field is the controlling parameter for solar wind coupling, and every result here uses scalar field strength instead. Some of what is counted as a false alarm may be a real solar wind structure that never coupled. The loader now requests Bz, but the cached windows predate that change.</li>
       <li><strong>The ground truth under-labels reality.</strong> The catalogue lists one storm per month-long window, but October 2003 had storm-level Kp in 17% of its hours. Precision figures are lower bounds.</li>
       <li><strong>No lead-time results yet.</strong> Storm onset times are not yet in the catalogue, so I can measure detection but not how much warning it would give.</li>
     </ul>
@@ -728,16 +767,43 @@
   var data = null, storm = null;
   var el = function (id) { return document.getElementById(id); };
 
-  function flags(rec, det, sigma) {
-    if (!SPC[det]) return rec[det].slice();          // forest: fixed decision
-    var z = rec[det], out = new Array(rec.t.length).fill(false);
+  // A detector is a score plus a threshold. Keeping the score separate from the
+  // decision is what lets the page force every detector to the same alert
+  // budget, which is the comparison RESULTS.md section 4.6 is about.
+  function scoreOf(rec, det) {
+    if (!SPC[det]) return rec[det + "_score"] || null;
+    var z = rec[det], n = rec.t.length, out = new Array(n).fill(null);
     rec.features.forEach(function (f) {
       var col = z[f]; if (!col) return;
-      for (var i = 0; i < col.length; i++) {
-        if (col[i] !== null && Math.abs(col[i]) > sigma) out[i] = true;
+      for (var i = 0; i < n; i++) {
+        if (col[i] === null) continue;
+        var a = Math.abs(col[i]);
+        if (out[i] === null || a > out[i]) out[i] = a;
       }
     });
     return out;
+  }
+
+  // Select exactly `budget` rows by rank. A plain threshold cannot do this:
+  // z-scores are serialised to six decimals, so ties at the cut point let one
+  // configuration flag 121 hours while another flags 120, and a "matched"
+  // budget that is not actually matched defeats the whole comparison.
+  function topByScore(score, budget) {
+    var idx = [];
+    for (var i = 0; i < score.length; i++) if (score[i] !== null) idx.push(i);
+    idx.sort(function (a, b) { return score[b] - score[a] || a - b; });
+    var pick = new Array(score.length).fill(false);
+    var n = Math.min(budget, idx.length);
+    for (var k = 0; k < n; k++) pick[idx[k]] = true;
+    return pick;
+  }
+
+  function flags(rec, det, sigma, mode, budget) {
+    var score = scoreOf(rec, det);
+    if (!score) return (rec[det] || []).slice();
+    if (mode === "budget") return topByScore(score, budget);
+    if (!SPC[det]) return rec[det].slice();   // forest keeps its own default
+    return score.map(function (v) { return v !== null && v > sigma; });
   }
 
   function truthMask(rec, tolHours) {
@@ -764,6 +830,13 @@
       far: ratio(quietFlag, quiet)
     };
   }
+
+  var CONFIGS = [
+    ["spc_cal", "SPC, calendar quiet half"],
+    ["spc_kp", "SPC, Kp&lt;3 quiet rows"],
+    ["if_all", "Isolation Forest, all data"],
+    ["if_quiet", "Isolation Forest, Kp&lt;3 rows"]
+  ];
 
   var fmt = function (v) { return isFinite(v) ? v.toFixed(3) : "n/a"; };
   var pct = function (v) { return isFinite(v) ? (v * 100).toFixed(1) + "%" : "n/a"; };
@@ -823,16 +896,34 @@
     var det = el("c-det").value;
     var sigma = parseFloat(el("c-sigma").value);
     var tol = parseInt(el("c-tol").value, 10);
+    var mode = el("c-mode").value;
+    var budget = parseInt(el("c-budget").value, 10);
     var isSpc = !!SPC[det];
+    var matched = mode === "budget";
 
     el("v-sigma").textContent = sigma.toFixed(1);
     el("v-tol").textContent = tol;
+    el("v-budget").textContent = budget;
+    el("ctl-sigma").hidden = matched;
+    el("ctl-budget").hidden = !matched;
     el("ctl-sigma").classList.toggle("disabled", !isSpc);
     el("c-sigma").disabled = !isSpc;
-    el("sigma-note").hidden = isSpc;
+    el("sigma-note").hidden = isSpc || matched;
+    el("budget-compare").hidden = !matched;
 
-    var flag = flags(rec, det, sigma);
+    var flag = flags(rec, det, sigma, mode, budget);
     var truth = truthMask(rec, tol);
+
+    if (matched) {
+      el("budget-rows").innerHTML = CONFIGS.map(function (c) {
+        var f = flags(rec, c[0], sigma, "budget", budget);
+        var m = metrics(rec, f, truth);
+        var me = c[0] === det ? ' style="font-weight:650"' : "";
+        return "<tr" + me + "><td>" + c[1] + "</td><td>" + m.flagged + "</td><td>" +
+               fmt(m.precision) + "</td><td>" + fmt(m.recall) + "</td><td>" +
+               pct(m.far) + "</td></tr>";
+      }).join("");
+    }
     var m = metrics(rec, flag, truth);
 
     el("m-flag").textContent = m.flagged;
@@ -886,7 +977,8 @@
       if (i < 0 || i >= n) { hide(); return; }
 
       var det = el("c-det").value, sigma = parseFloat(el("c-sigma").value);
-      var flag = flags(rec, det, sigma)[i];
+      var flag = flags(rec, det, sigma, el("c-mode").value,
+                       parseInt(el("c-budget").value, 10))[i];
       var when = new Date(rec.t[i] * 1000).toISOString().slice(0, 16).replace("T", " ");
       var rows = rec.features.map(function (f) {
         var v = rec.raw[f][i];
@@ -939,7 +1031,7 @@
     // Default to St Patrick's Day: it is the window discussed in RESULTS.md.
     var d = j.storms.findIndex(function (s) { return s.name.indexOf("Patrick") >= 0; });
     el("c-storm").value = d < 0 ? 0 : d;
-    ["c-det", "c-sigma", "c-tol"].forEach(function (id) {
+    ["c-det", "c-sigma", "c-tol", "c-mode", "c-budget"].forEach(function (id) {
       el(id).addEventListener("input", render);
     });
     el("c-storm").addEventListener("change", selectStorm);

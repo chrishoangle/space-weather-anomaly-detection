@@ -18,10 +18,13 @@ Consequently only the fitted quantities need to cross the boundary: per-feature
 z-scores under each fitting regime, the Isolation Forest decisions, the raw
 series for plotting, and Kp for the quiet-time false-alarm rate.
 
-Isolation Forest is the exception to the slider rule. Its decision comes from
-its own contamination-derived threshold rather than from sigma, so the boolean
-it produced at fit time is exported directly and the sigma slider is disabled
-in the browser when a forest configuration is selected.
+Isolation Forest needs a second score rather than a boolean. Its decision comes
+from a contamination-derived threshold, not from sigma, so exporting only the
+boolean fixes it at one arbitrary operating point. That is precisely the confound
+documented in RESULTS.md section 4.6: two detectors compared at whatever threshold
+their defaults produce are not being compared. Exporting the continuous anomaly
+score lets the browser reproduce a matched alert budget, so a visitor can set both
+detectors to flag the same number of hours and see what survives.
 
 Run from the project root::
 
@@ -107,13 +110,16 @@ def build_record(event: StormEvent, frame: pd.DataFrame) -> dict[str, object]:
             if f"{f}_zscore" in predictions.columns
         }
 
-    # Isolation Forest: the decision comes from contamination, not sigma, so
-    # the boolean is exported as-is and the sigma slider is disabled for it.
+    # Isolation Forest: export the continuous score alongside the default
+    # decision. The score is what makes a matched-budget comparison possible in
+    # the browser; the boolean preserves the detector's own operating point so
+    # the published figures remain reproducible from this file.
     for key, kwargs in (("if_all", {}), ("if_quiet", {"fit_on_quiet_only": True})):
         predictions = IsolationForestDetector(
             n_estimators=300, features=features, **kwargs
         ).fit_predict(frame, quiet_mask=kp_quiet)
         record[key] = [bool(v) for v in predictions["anomaly"]]
+        record[f"{key}_score"] = _round(predictions["anomaly_score"], Z_DECIMALS)
 
     return record
 

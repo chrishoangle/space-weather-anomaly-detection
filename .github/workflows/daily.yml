@@ -38,15 +38,37 @@ jobs:
         # instead of training us to ignore failures.
         run: python scripts/run_daily_detection.py --hours 72
 
-      - name: Commit the report
+      - name: Commit the report only when something changed
+        # The report embeds its own generation timestamp, so a naive diff is
+        # always non-empty and the job commits every single day. Seventy of
+        # those commits bury the real history. Commit only when the detector
+        # state actually changed, or once a week as a heartbeat so a silently
+        # dead job is still visible in the log.
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          prev=$(git show HEAD:reports/latest.json 2>/dev/null \
+                 | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('status'), d.get('active_now'), d.get('storm_class'))" 2>/dev/null || echo "none")
+          curr=$(python3 -c "import json; d=json.load(open('reports/latest.json')); print(d.get('status'), d.get('active_now'), d.get('storm_class'))")
+          weekday=$(date -u +%u)
+
+          if [ "$prev" = "$curr" ] && [ "$weekday" != "1" ]; then
+            echo "State unchanged ($curr) and not the weekly heartbeat. Not committing."
+            exit 0
+          fi
+
+          if [ "$prev" = "$curr" ]; then
+            msg="chore: weekly detection heartbeat, state $curr [skip ci]"
+          else
+            msg="detection state change: $prev -> $curr [skip ci]"
+          fi
+
           git add reports/latest.md reports/latest.json
           if git diff --cached --quiet; then
-            echo "Report unchanged; nothing to commit."
+            echo "Nothing staged."
           else
-            git commit -m "chore: daily detection report [skip ci]"
+            git commit -m "$msg"
             git push
           fi
 
