@@ -41,7 +41,43 @@ from src.models import StatisticalProcessControlDetector  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORTS_DIR = ROOT / "reports"
+DOCS_DIR = ROOT / "docs"
 FEATURES = ("speed", "density", "temperature")
+
+#: Fields published to `docs/status.json` for the live tile on the GitHub Pages
+#: site. Deliberately a subset: `peak_zscores` and `driving_features` are
+#: diagnostic detail that belongs in the report, not on a public page, and
+#: pinning the list here means adding a field to the report cannot leak it to
+#: the web by accident.
+WEB_STATUS_FIELDS = (
+    "status",
+    "generated_at",
+    "message",
+    "latest_sample",
+    "data_age_hours",
+    "n_samples",
+    "n_flagged",
+    "flagged_fraction",
+    "latest_kp",
+    "storm_class",
+    "active_now",
+)
+
+#: Fields that state a verdict about current conditions. Null in the published
+#: payload whenever the status is not OK, because they are computed from the
+#: window regardless of whether that window was fresh enough to trust.
+VERDICT_FIELDS = (
+    "n_flagged",
+    "flagged_fraction",
+    "latest_kp",
+    "storm_class",
+    "active_now",
+)
+
+#: Bumped when the shape of `docs/status.json` changes, so an old cached page
+#: can tell it is looking at something it does not understand and fall back to
+#: "unknown" rather than misreading a field.
+WEB_STATUS_SCHEMA = 1
 
 #: A report built from data older than this is not trustworthy as a
 #: "current conditions" statement.
@@ -80,6 +116,40 @@ class DailyResult:
 
     def to_dict(self) -> dict[str, object]:
         return {key: value for key, value in self.__dict__.items()}
+
+
+def web_status(result: DailyResult) -> dict[str, object]:
+    """Trim a result down to what the public status tile needs.
+
+    The tile has one job the rest of the site does not: it must be able to say
+    it does not know. That depends on two separate ages, both published here
+    rather than computed in the browser. ``data_age_hours`` is how old the
+    newest NOAA sample was when the job ran, and ``generated_at`` is when the
+    job ran, which lets the page detect that the job itself has stopped
+    publishing. A tile that only knew the first would keep showing a confident
+    verdict from a pipeline that died a fortnight ago.
+
+    Args:
+        result: The outcome of a detection run, OK or NODATA alike.
+
+    Returns:
+        A JSON-serialisable dict carrying ``schema`` plus
+        :data:`WEB_STATUS_FIELDS`.
+    """
+    payload: dict[str, object] = {"schema": WEB_STATUS_SCHEMA}
+    for field in WEB_STATUS_FIELDS:
+        payload[field] = getattr(result, field)
+
+    # `detect` fills the verdict fields from whatever it was given, even when
+    # it then rules the window too stale to trust. `render` guards on status
+    # before printing, but raw JSON has no such guard, so a consumer reading
+    # `active_now` without first reading `status` would see a confident False
+    # computed from week-old data. Blank them rather than rely on every future
+    # consumer being careful.
+    if result.status != STATUS_OK:
+        for field in VERDICT_FIELDS:
+            payload[field] = None
+    return payload
 
 
 def _storm_class(kp: float | None) -> str | None:
@@ -274,6 +344,13 @@ def main() -> int:
     (REPORTS_DIR / "latest.md").write_text(render(result), encoding="utf-8")
     (REPORTS_DIR / "latest.json").write_text(
         json.dumps(result.to_dict(), indent=2), encoding="utf-8"
+    )
+    # Published to GitHub Pages beside index.html, which fetches it for the
+    # live status tile. Written on every run, including NODATA, because the
+    # page has to be able to show "unknown" rather than the last good verdict.
+    DOCS_DIR.mkdir(exist_ok=True)
+    (DOCS_DIR / "status.json").write_text(
+        json.dumps(web_status(result), indent=2), encoding="utf-8"
     )
     print(f"status={result.status} flagged={result.n_flagged}/{result.n_samples}")
     print(result.message)

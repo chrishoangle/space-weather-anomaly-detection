@@ -17,9 +17,13 @@ import pytest
 from scripts.run_daily_detection import (
     STATUS_NODATA,
     STATUS_OK,
+    VERDICT_FIELDS,
+    WEB_STATUS_FIELDS,
+    WEB_STATUS_SCHEMA,
     DailyResult,
     detect,
     render,
+    web_status,
 )
 
 
@@ -107,3 +111,47 @@ def test_result_is_json_serialisable():
     # break it at 06:00 UTC with nobody watching.
     result = detect(_recent_frame(storm=True), sigma=3.0)
     json.dumps(result.to_dict())
+
+
+def test_web_status_is_json_serialisable_and_versioned():
+    payload = web_status(detect(_recent_frame(storm=True), sigma=3.0))
+    json.dumps(payload)
+    assert payload["schema"] == WEB_STATUS_SCHEMA
+    assert set(payload) == {"schema", *WEB_STATUS_FIELDS}
+
+
+def test_web_status_withholds_diagnostic_detail():
+    # peak_zscores and driving_features are report-only. Adding a field to
+    # DailyResult must not publish it to the web by accident.
+    payload = web_status(detect(_recent_frame(storm=True), sigma=3.0))
+    assert "peak_zscores" not in payload
+    assert "driving_features" not in payload
+
+
+def test_web_status_carries_both_ages_needed_to_detect_a_dead_pipeline():
+    # The tile needs the age of the DATA and the age of the RUN. With only the
+    # first, a job that stopped publishing a fortnight ago still looks healthy.
+    payload = web_status(detect(_recent_frame(), sigma=3.0))
+    assert payload["generated_at"]
+    assert payload["data_age_hours"] is not None
+
+
+def test_web_status_propagates_unknown_rather_than_the_last_good_verdict():
+    # The same critical contract as the markdown report, at the web boundary.
+    payload = web_status(detect(_recent_frame(age_hours=30), sigma=3.0))
+    assert payload["status"] == STATUS_NODATA
+    # Every verdict field blanked. detect() populates these from the stale
+    # window; publishing them would let a careless reader take active_now as
+    # an all-clear from a pipeline that has not had fresh data in days.
+    for field in VERDICT_FIELDS:
+        assert payload[field] is None, field
+    # What it legitimately knows about its own ignorance survives.
+    assert payload["data_age_hours"] > 6
+    assert "unknown" in payload["message"]
+
+
+def test_web_status_keeps_the_verdict_when_the_data_is_fresh():
+    payload = web_status(detect(_recent_frame(storm=True), sigma=3.0))
+    assert payload["status"] == STATUS_OK
+    assert payload["active_now"] is True
+    assert payload["storm_class"] == "G3 strong"
