@@ -331,7 +331,11 @@
   /* Segmented toggle. Real radios so arrow keys and screen readers work; the
      input is clipped rather than display:none, which would drop it from the
      tab order. */
-  .seg { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  /* position:relative matters: the inputs below are absolutely positioned and
+     would otherwise anchor to whatever positioned ancestor they happen to find,
+     which puts them somewhere else on the page entirely. */
+  .seg { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 8px;
+         overflow: hidden; position: relative; }
   .seg input { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
                overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   .seg label {
@@ -345,6 +349,103 @@
   .seg input:checked + label { background: var(--series-1); color: #fff; }
   .seg input:focus-visible + label { outline: 2px solid var(--series-1); outline-offset: -3px; }
   .seg-note { font-size: .76rem; font-weight: 500; color: var(--text-muted); line-height: 1.45; }
+
+  /* ---- explorer: diagnostics row ---- */
+  .ex-grid { display: grid; gap: 14px; margin-top: 14px; }
+  @media (min-width: 800px) { .ex-grid { grid-template-columns: minmax(0,0.85fr) minmax(0,1.15fr); } }
+  /* The two cards sit side by side and the curve is the taller of them, so let
+     the matrix grow into the leftover height instead of leaving a gap. */
+  .ex-grid > .chart-card { display: flex; flex-direction: column; }
+  .ex-grid .cm { flex: 1; align-content: stretch; }
+  .ex-grid .cm .cell { display: flex; flex-direction: column; justify-content: center; }
+
+  /* 2x2 confusion matrix. Laid out as a real grid with corner labels rather
+     than a table, so the four counts stay square at any width. */
+  .cm { display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px; margin-top: 6px; }
+  .cm .ch {
+    font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--text-muted); display: flex; align-items: center; justify-content: center;
+    text-align: center; line-height: 1.3; padding: 2px;
+  }
+  .cm .rh { justify-content: flex-end; text-align: right; max-width: 92px; }
+  .cm .cell {
+    border: 1px solid var(--border); border-radius: 9px; padding: 12px 10px; text-align: center;
+    background: var(--surface-2); position: relative; overflow: hidden;
+  }
+  .cm .cell .fill { position: absolute; inset: 0; background: currentColor; opacity: .13; }
+  .cm .cell .n {
+    position: relative; font-size: 1.5rem; font-weight: 700; line-height: 1.05;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+  }
+  .cm .cell .k { position: relative; font-size: .7rem; font-weight: 650; margin-top: 3px; color: var(--text-secondary); }
+  .cm .good { color: var(--good); }
+  .cm .bad { color: var(--critical); }
+  .cm .neutral { color: var(--text-muted); }
+  .cm-note { font-size: .76rem; color: var(--text-muted); margin-top: 10px; line-height: 1.5; }
+
+  /* ---- precision-recall curve ---- */
+  .prc { width: 100%; height: auto; display: block; margin-top: 4px; }
+  .prc .frame { stroke: var(--grid); fill: none; stroke-width: 1; }
+  .prc .gl { stroke: var(--grid); stroke-width: 1; stroke-dasharray: 2 3; }
+  .prc .other { fill: none; stroke: var(--baseline); stroke-width: 1.4; opacity: .55; }
+  .prc .curve { fill: none; stroke: var(--series-1); stroke-width: 2.4; }
+  .prc .curve.forest { stroke: var(--series-2); }
+  .prc .now { fill: var(--critical); stroke: var(--page); stroke-width: 2; }
+  .prc text { fill: var(--text-muted); font-size: 10px; font-family: system-ui, sans-serif;
+              font-variant-numeric: tabular-nums; }
+  .prc .atitle { fill: var(--text-secondary); font-size: 10.5px; font-weight: 650; }
+
+  /* ---- side-by-side flag ribbons ---- */
+  .ribbon { display: block; width: 100%; height: 46px; }
+  .ribbon .band { fill: #bcd4ef; opacity: .5; }
+  .ribbon .box { fill: none; stroke: var(--grid); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .ribbon .hit { stroke: var(--critical); stroke-width: 1.1; vector-effect: non-scaling-stroke; opacity: .9; }
+  .rib-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline;
+              margin: 14px 0 3px; font-size: .84rem; }
+  .rib-head b { font-weight: 650; }
+  .rib-head .stat { color: var(--text-muted); font-size: .79rem; font-variant-numeric: tabular-nums; }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .ribbon .band { fill: #22364f; }
+  }
+
+  /* ---- alert-rate calendar heatmap ---- */
+  .heat { display: grid; gap: 7px; margin-top: 6px; }
+  .heat-row { display: grid; grid-template-columns: 172px minmax(0,1fr); gap: 11px; align-items: center; }
+  .heat-name { font-size: .82rem; color: var(--text-secondary); text-align: right; line-height: 1.25; }
+  .heat-name.me { color: var(--text-primary); font-weight: 650; }
+  .heat-cells { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0,1fr);
+                gap: 2px; height: 24px; }
+  .heat-cells i { border-radius: 2px; background: var(--critical); display: block; }
+  .heat-axis { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0,1fr); gap: 2px;
+               margin-left: 183px; font-size: .64rem; color: var(--text-muted);
+               font-variant-numeric: tabular-nums; }
+  .heat-axis span { text-align: center; overflow: hidden; }
+  .heat-scale { display: flex; align-items: center; gap: 8px; font-size: .76rem;
+                color: var(--text-muted); margin-top: 14px; }
+  .heat-scale .ramp { display: flex; gap: 2px; }
+  .heat-scale .ramp i { width: 16px; height: 11px; border-radius: 2px; background: var(--critical); }
+  @media (max-width: 620px) {
+    .heat-row { grid-template-columns: 1fr; gap: 3px; }
+    .heat-name { text-align: left; }
+    .heat-axis { margin-left: 0; }
+    .heat { gap: 13px; }
+  }
+
+  /* ---- live monitor status ---- */
+  .status-card {
+    display: grid; gap: 14px; align-items: center; margin-top: 22px;
+    grid-template-columns: auto minmax(0,1fr);
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-left: 3px solid var(--baseline); border-radius: 0 12px 12px 0; padding: 17px 20px;
+  }
+  .status-card.ok { border-left-color: var(--good); }
+  .status-card.alert { border-left-color: var(--series-2); }
+  .status-card.unknown { border-left-color: var(--text-muted); }
+  .status-led { width: 11px; height: 11px; border-radius: 50%; background: var(--text-muted); }
+  .status-card.ok .status-led { background: var(--good); }
+  .status-card.alert .status-led { background: var(--series-2); }
+  .status-head { font-size: .95rem; font-weight: 650; }
+  .status-sub { font-size: .81rem; color: var(--text-muted); margin-top: 3px; line-height: 1.5; }
 
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px,1fr)); gap: 14px; margin: 26px 0 8px; }
   .tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 17px 18px; }
@@ -544,7 +645,38 @@
       <div class="tile"><div class="value" id="m-far">.</div><div class="label">Quiet false-alarm rate</div><div class="note" id="m-farsub">Share of Kp&lt;3 hours flagged</div></div>
     </div>
 
-    <div class="chart-card" style="margin-top:16px">
+    <div class="ex-grid">
+      <div class="chart-card">
+        <div class="chart-title">Where those hours went</div>
+        <div class="chart-sub">Every hour in the window, sorted into the four outcomes.</div>
+        <div class="cm" id="cm" role="img" aria-labelledby="cm-alt">
+          <div class="ch"></div>
+          <div class="ch">called quiet</div>
+          <div class="ch">called anomalous</div>
+          <div class="ch rh">actually quiet</div>
+          <div class="cell neutral"><i class="fill"></i><div class="n" id="cm-tn">.</div><div class="k">correct pass</div></div>
+          <div class="cell bad"><i class="fill"></i><div class="n" id="cm-fp">.</div><div class="k">false alarm</div></div>
+          <div class="ch rh">actually storm</div>
+          <div class="cell bad"><i class="fill"></i><div class="n" id="cm-fn">.</div><div class="k">missed hour</div></div>
+          <div class="cell good"><i class="fill"></i><div class="n" id="cm-tp">.</div><div class="k">caught</div></div>
+        </div>
+        <p class="cm-note" id="cm-alt">.</p>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-title">Precision against recall, every threshold</div>
+        <div class="chart-sub">Each curve sweeps one detector's alert budget from 1 hour to the whole
+          window. The red dot is where your current settings sit.</div>
+        <div class="legend">
+          <span><i class="swatch solid-dot" id="prc-key"></i> <span id="prc-name">selected detector</span></span>
+          <span><i class="swatch" style="background:var(--baseline)"></i> the other three</span>
+          <span><i class="swatch" style="background:var(--critical);border-radius:50%"></i> current setting</span>
+        </div>
+        <div id="prc-host"></div>
+      </div>
+    </div>
+
+    <div class="chart-card" style="margin-top:14px">
       <div class="legend">
         <span><i class="swatch" style="background:var(--series-1)"></i> measured value</span>
         <span><i class="swatch" style="background:var(--critical)"></i> detector flag</span>
@@ -571,6 +703,37 @@
         </table>
         </div>
       </details>
+    </div>
+
+    <div class="chart-card" style="margin-top:14px">
+      <div class="chart-title">Two detectors, same window, same controls</div>
+      <div class="chart-sub">Only the flags. Shaded band is the real storm, each red line is a
+        flagged hour, and both rows obey the controls above.</div>
+      <label class="ctl" style="max-width:320px;margin-top:14px">
+        <span>Compare against</span>
+        <select id="c-cmp">
+          <option value="">Nothing, hide this</option>
+          <option value="spc_cal">SPC 3 sigma, calendar quiet half</option>
+          <option value="spc_kp">SPC 3 sigma, Kp&lt;3 quiet rows</option>
+          <option value="if_all">Isolation Forest, all data</option>
+          <option value="if_quiet" selected>Isolation Forest, Kp&lt;3 rows</option>
+        </select>
+      </label>
+      <div id="ribbons"></div>
+    </div>
+
+    <div class="chart-card" style="margin-top:14px">
+      <div class="chart-title">Alert rate, day by day</div>
+      <div class="chart-sub">Share of each day's hours that the detector flagged, under the
+        settings above. At a matched budget every row spends the same number of alerts, so
+        what differs is where they land. Switch to each detector's own default to see how
+        far apart the totals really are.</div>
+      <div class="heat" id="heat"></div>
+      <div class="heat-axis" id="heat-axis"></div>
+      <div class="heat-scale">
+        <span>0%</span><span class="ramp" id="heat-ramp"></span><span id="heat-max">100%</span>
+        <span style="margin-left:6px">of that day's hours flagged</span>
+      </div>
     </div>
   </div>
 </section>
@@ -787,8 +950,16 @@
       </div>
     </div>
 
+    <div class="status-card unknown" id="status-card">
+      <i class="status-led" aria-hidden="true"></i>
+      <div>
+        <div class="status-head" id="status-head">Checking the live monitor...</div>
+        <div class="status-sub" id="status-sub">Reading the status the scheduled job last published.</div>
+      </div>
+    </div>
+
     <div class="badges">
-      <span class="badge"><i class="dot"></i>108 tests passing</span>
+      <span class="badge"><i class="dot"></i>113 tests passing</span>
       <span class="badge"><i class="dot"></i>CI on Python 3.11, 3.12, 3.13</span>
       <span class="badge"><i class="dot"></i>Reproducible offline</span>
       <span class="badge"><i class="dot"></i>180 of 180 browser-vs-Python checks agree</span>
@@ -1221,6 +1392,161 @@
       "</svg>";
   }
 
+  // ---- precision-recall curve -------------------------------------------
+  //
+  // Sweeping the alert budget from 1 to N and recording precision and recall
+  // at each step IS the precision-recall curve, because flagging the top k by
+  // score is exactly what `topByScore` does. Walking the ranked list once and
+  // accumulating counts gives the whole curve in O(n), so this is cheap enough
+  // to recompute on every slider move.
+  function prCurve(rec, det, truth) {
+    var score = scoreOf(rec, det);
+    if (!score) return null;
+    var idx = [];
+    for (var i = 0; i < score.length; i++) if (score[i] !== null) idx.push(i);
+    if (!idx.length) return null;
+    idx.sort(function (a, b) { return score[b] - score[a] || a - b; });
+
+    var positives = 0;
+    for (var p = 0; p < truth.length; p++) if (truth[p]) positives++;
+    if (!positives) return null;
+
+    var tp = 0, pts = [];
+    for (var k = 0; k < idx.length; k++) {
+      if (truth[idx[k]]) tp++;
+      pts.push([tp / positives, tp / (k + 1)]);
+    }
+    return pts;
+  }
+
+  function drawCurve(rec, det, truth, now) {
+    var W = 460, H = 330, L = 44, R = 12, T = 12, B = 34;
+    var pw = W - L - R, ph = H - T - B;
+    var X = function (r) { return L + r * pw; };
+    var Y = function (p) { return T + ph - p * ph; };
+    var path = function (pts) {
+      var d = "";
+      for (var i = 0; i < pts.length; i++) {
+        d += (i ? "L" : "M") + X(pts[i][0]).toFixed(1) + " " + Y(pts[i][1]).toFixed(1) + " ";
+      }
+      return d;
+    };
+
+    var grid = "", ax = "";
+    [0, 0.25, 0.5, 0.75, 1].forEach(function (v) {
+      grid += '<line class="gl" x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(v) + '" y2="' + Y(v) + '"/>' +
+              '<line class="gl" y1="' + T + '" y2="' + (T + ph) + '" x1="' + X(v) + '" x2="' + X(v) + '"/>';
+      ax += '<text x="' + (L - 7) + '" y="' + (Y(v) + 3.5) + '" text-anchor="end">' + v.toFixed(2) + "</text>" +
+            '<text x="' + X(v) + '" y="' + (T + ph + 15) + '" text-anchor="middle">' + v.toFixed(2) + "</text>";
+    });
+
+    var others = "";
+    CONFIGS.forEach(function (c) {
+      if (c[0] === det) return;
+      var pts = prCurve(rec, c[0], truth);
+      if (pts) others += '<path class="other" d="' + path(pts) + '"/>';
+    });
+
+    var mine = prCurve(rec, det, truth);
+    var main = mine ? '<path class="curve' + (SPC[det] ? "" : " forest") + '" d="' + path(mine) + '"/>' : "";
+
+    var dot = "";
+    if (isFinite(now.precision) && isFinite(now.recall)) {
+      dot = '<circle class="now" cx="' + X(now.recall).toFixed(1) + '" cy="' +
+            Y(now.precision).toFixed(1) + '" r="5.5"/>';
+    }
+
+    return '<svg class="prc" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' +
+      'Precision against recall. The selected detector reaches precision ' + fmt(now.precision) +
+      ' at recall ' + fmt(now.recall) + ' with the current settings.">' +
+      grid + ax +
+      '<rect class="frame" x="' + L + '" y="' + T + '" width="' + pw + '" height="' + ph + '"/>' +
+      others + main + dot +
+      '<text class="atitle" x="' + (L + pw / 2) + '" y="' + (H - 4) + '" text-anchor="middle">Recall</text>' +
+      '<text class="atitle" x="-' + (T + ph / 2) + '" y="11" transform="rotate(-90)" text-anchor="middle">Precision</text>' +
+      "</svg>";
+  }
+
+  // ---- flag-only ribbon, for the side-by-side comparison ------------------
+  function ribbon(rec, flag, tolHours) {
+    var W = 1000, H = 46, L = 2, R = 2, T = 3;
+    var pw = W - L - R, ph = H - T * 2;
+    var n = rec.t.length, t0 = rec.t[0], t1 = rec.t[n - 1];
+    var X = function (t) { return L + ((t - t0) / (t1 - t0)) * pw; };
+    var w = tolHours * HOUR;
+    var bx = X(Math.max(rec.peak - w, t0)), bw = X(Math.min(rec.peak + w, t1)) - bx;
+
+    var hits = "";
+    for (var i = 0; i < n; i++) {
+      if (flag[i]) {
+        var x = X(rec.t[i]).toFixed(1);
+        hits += '<line class="hit" x1="' + x + '" x2="' + x + '" y1="' + T + '" y2="' + (T + ph) + '"/>';
+      }
+    }
+    return '<svg class="ribbon" viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" aria-hidden="true">' +
+      '<rect class="band" x="' + bx.toFixed(1) + '" y="' + T + '" width="' + Math.max(bw, 1).toFixed(1) +
+      '" height="' + ph + '"/>' + hits +
+      '<rect class="box" x="' + L + '" y="' + T + '" width="' + pw + '" height="' + ph + '"/></svg>';
+  }
+
+  function nameOf(det) {
+    for (var i = 0; i < CONFIGS.length; i++) if (CONFIGS[i][0] === det) return CONFIGS[i][1];
+    return det;
+  }
+
+  // ---- day buckets, shared by the heatmap --------------------------------
+  function byDay(rec) {
+    var days = [], index = {};
+    for (var i = 0; i < rec.t.length; i++) {
+      var key = new Date(rec.t[i] * 1000).toISOString().slice(0, 10);
+      if (!(key in index)) { index[key] = days.length; days.push({ key: key, rows: [] }); }
+      days[index[key]].rows.push(i);
+    }
+    return days;
+  }
+
+  function drawHeat(rec, det, sigma, md, budget) {
+    var days = byDay(rec);
+    var rows = CONFIGS.map(function (c) {
+      var f = flags(rec, c[0], sigma, md, budget);
+      return {
+        det: c[0], label: c[1],
+        rates: days.map(function (d) {
+          var hit = 0;
+          for (var i = 0; i < d.rows.length; i++) if (f[d.rows[i]]) hit++;
+          return d.rows.length ? hit / d.rows.length : 0;
+        })
+      };
+    });
+
+    // One shared scale across all four rows, otherwise a restrained detector
+    // and a constantly firing one would look identical.
+    var peak = 0;
+    rows.forEach(function (r) { r.rates.forEach(function (v) { if (v > peak) peak = v; }); });
+    if (peak <= 0) peak = 1;
+
+    el("heat").innerHTML = rows.map(function (r) {
+      var cells = r.rates.map(function (v, i) {
+        var day = days[i].key.slice(8);
+        return '<i style="opacity:' + (v === 0 ? 0.06 : (0.14 + 0.86 * (v / peak))).toFixed(3) +
+               '" title="' + day + ": " + (v * 100).toFixed(0) + '% of hours flagged"></i>';
+      }).join("");
+      return '<div class="heat-row"><div class="heat-name' + (r.det === det ? " me" : "") + '">' +
+             r.label + '</div><div class="heat-cells" role="img" aria-label="' +
+             r.label.replace(/&lt;/g, "<") + ', daily alert rate, peak ' +
+             (Math.max.apply(null, r.rates) * 100).toFixed(0) + ' percent">' + cells + "</div></div>";
+    }).join("");
+
+    el("heat-axis").innerHTML = days.map(function (d, i) {
+      var n = +d.key.slice(8);
+      return "<span>" + (days.length > 16 && i % 3 ? "" : n) + "</span>";
+    }).join("");
+    el("heat-ramp").innerHTML = [0.06, 0.3, 0.52, 0.74, 1].map(function (o) {
+      return '<i style="opacity:' + o + '"></i>';
+    }).join("");
+    el("heat-max").textContent = (peak * 100).toFixed(0) + "%";
+  }
+
   function render() {
     var rec = storm;
     var det = el("c-det").value;
@@ -1271,17 +1597,50 @@
       ["Quiet-time false-alarm rate", pct(m.far)]
     ].map(function (r) { return "<tr><td>" + r[0] + "</td><td>" + r[1] + "</td></tr>"; }).join("");
 
+    // Confusion matrix. TN is the only count metrics() does not carry, and it
+    // is the rest of the window.
+    var tn = m.n - m.tp - m.fp - m.fn;
+    el("cm-tp").textContent = m.tp;
+    el("cm-fp").textContent = m.fp;
+    el("cm-fn").textContent = m.fn;
+    el("cm-tn").textContent = tn;
+    el("cm-alt").textContent =
+      "Of " + m.flagged + " flagged hours, " + m.tp + " landed inside the storm window and " +
+      m.fp + " did not. " + m.fn + " storm hours were missed. Storm hours are " +
+      (m.stormHours / m.n * 100).toFixed(0) + "% of this window, which is why accuracy is useless here: " +
+      "flagging nothing would score " + ((m.n - m.stormHours) / m.n * 100).toFixed(0) + "%.";
+
+    // Precision-recall curve.
+    el("prc-host").innerHTML = drawCurve(rec, det, truth, m);
+    el("prc-key").style.background = SPC[det] ? "var(--series-1)" : "var(--series-2)";
+    el("prc-name").innerHTML = nameOf(det);
+
     var html = rec.features.map(function (f) {
       return panel(f, rec.raw[f], rec, flag, tol, 84);
     }).join("") + panel("Kp", rec.Kp, rec, flag, tol, 84);
 
     var d0 = new Date(rec.t[0] * 1000), d1 = new Date(rec.t[rec.t.length - 1] * 1000);
     var opt = { month: "short", day: "numeric", timeZone: "UTC" };
-    html += '<div class="xaxis"><span>' + d0.toLocaleDateString("en-GB", opt) +
-            "</span><span>" + d1.toLocaleDateString("en-GB", opt) + " (UTC)</span></div>";
-    el("panels").innerHTML = html;
+    var axis = '<div class="xaxis"><span>' + d0.toLocaleDateString("en-GB", opt) +
+               "</span><span>" + d1.toLocaleDateString("en-GB", opt) + " (UTC)</span></div>";
+    el("panels").innerHTML = html + axis;
     el("tip").hidden = true;
     attachHover();
+
+    // Side-by-side ribbons.
+    var cmp = el("c-cmp").value;
+    var row = function (key, f) {
+      var mm = metrics(rec, f, truth);
+      return '<div class="rib-head"><b>' + nameOf(key) + '</b>' +
+             '<span class="stat">' + mm.flagged + " hours &middot; precision " + fmt(mm.precision) +
+             " &middot; recall " + fmt(mm.recall) + " &middot; quiet FAR " + pct(mm.far) + "</span></div>" +
+             ribbon(rec, f, tol);
+    };
+    el("ribbons").innerHTML = cmp
+      ? row(det, flag) + row(cmp, flags(rec, cmp, sigma, md, budget)) + axis
+      : "";
+
+    drawHeat(rec, det, sigma, md, budget);
   }
 
   function selectStorm() {
@@ -1350,6 +1709,70 @@
     host.addEventListener("touchstart", function () { hide(); }, { passive: true });
   }
 
+  // ---- live monitor status tile -----------------------------------------
+  //
+  // Two ages decide what this says, and they fail independently. The job can
+  // run fine while NOAA goes quiet (status nodata), or NOAA can be fine while
+  // the job itself stops publishing (a stale file). Either one means the page
+  // does not know, and saying so is the whole point of the tile.
+  var STATUS_SCHEMA = 1;
+
+  // The scheduled job commits only on a state change, a weekly heartbeat, or
+  // when the published file passes two days old, so up to about three days is
+  // normal. Four is the point at which something has actually broken.
+  var STATUS_STALE_DAYS = 4;
+
+  function showStatus(kind, head, sub) {
+    var card = el("status-card");
+    card.className = "status-card " + kind;
+    el("status-head").textContent = head;
+    el("status-sub").textContent = sub;
+  }
+
+  function ago(hours) {
+    if (hours < 1) return Math.round(hours * 60) + " minutes ago";
+    if (hours < 48) return Math.round(hours) + " hours ago";
+    return Math.round(hours / 24) + " days ago";
+  }
+
+  function renderStatus(s) {
+    if (!s || s.schema !== STATUS_SCHEMA) {
+      showStatus("unknown", "Live monitor: unknown",
+        "The published status file is in a format this page does not recognise.");
+      return;
+    }
+    var published = Date.parse(s.generated_at);
+    var publishedAgeH = isNaN(published) ? Infinity : (Date.now() - published) / 3.6e6;
+
+    if (publishedAgeH > STATUS_STALE_DAYS * 24) {
+      showStatus("unknown", "Live monitor: unknown",
+        "The scheduled job last published " + ago(publishedAgeH) +
+        ". That is beyond the point where its verdict means anything, so this page " +
+        "will not repeat it.");
+      return;
+    }
+    if (s.status !== "ok") {
+      showStatus("unknown", "Live monitor: unknown",
+        "The job ran " + ago(publishedAgeH) + " and reported that upstream data was " +
+        "unusable, so there is no verdict. " + (s.message || ""));
+      return;
+    }
+    var active = s.active_now === true;
+    showStatus(active ? "alert" : "ok",
+      "Live monitor: " + (active ? "anomaly in the latest sample" : "nothing anomalous"),
+      "Geomagnetic conditions " + (s.storm_class || "unclassified") +
+      ". Scored " + s.n_samples + " samples, " + s.n_flagged + " flagged. " +
+      "NOAA data was " + ago(s.data_age_hours) + " when the job ran " + ago(publishedAgeH) + ".");
+  }
+
+  fetch("status.json").then(function (r) {
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }).then(renderStatus).catch(function () {
+    showStatus("unknown", "Live monitor: unknown",
+      "No usable status file was published, so this page has nothing to report.");
+  });
+
   fetch("storms.json").then(function (r) {
     if (!r.ok) throw new Error("HTTP " + r.status);
     return r.json();
@@ -1366,7 +1789,9 @@
     ["c-sigma", "c-tol", "c-budget"].forEach(function (id) {
       el(id).addEventListener("input", render);
     });
-    el("c-det").addEventListener("change", render);
+    ["c-det", "c-cmp"].forEach(function (id) {
+      el(id).addEventListener("change", render);
+    });
     document.querySelectorAll('input[name="mode"]').forEach(function (r) {
       r.addEventListener("change", render);
     });

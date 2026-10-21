@@ -42,29 +42,53 @@ jobs:
         # The report embeds its own generation timestamp, so a naive diff is
         # always non-empty and the job commits every single day. Seventy of
         # those commits bury the real history. Commit only when the detector
-        # state actually changed, or once a week as a heartbeat so a silently
-        # dead job is still visible in the log.
+        # state actually changed, once a week as a heartbeat so a silently
+        # dead job is still visible in the log, or when the status published
+        # to Pages is about to look stale.
+        #
+        # That last condition is new and exists for docs/status.json. The live
+        # tile on the site refuses to repeat a verdict older than four days,
+        # so without a refresh rule a quiet fortnight would leave the page
+        # saying "unknown" while the job was in fact running fine every
+        # morning. Refreshing at two days keeps the tile truthful at a cost of
+        # roughly three commits a week instead of seven.
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          prev=$(git show HEAD:reports/latest.json 2>/dev/null \
-                 | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('status'), d.get('active_now'), d.get('storm_class'))" 2>/dev/null || echo "none")
-          curr=$(python3 -c "import json; d=json.load(open('reports/latest.json')); print(d.get('status'), d.get('active_now'), d.get('storm_class'))")
+          state() { python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('status'), d.get('active_now'), d.get('storm_class'))"; }
+
+          prev=$(git show HEAD:reports/latest.json 2>/dev/null | state 2>/dev/null || echo "none")
+          curr=$(state < reports/latest.json)
           weekday=$(date -u +%u)
 
-          if [ "$prev" = "$curr" ] && [ "$weekday" != "1" ]; then
-            echo "State unchanged ($curr) and not the weekly heartbeat. Not committing."
+          # Age, in whole days, of the docs/status.json currently on the branch.
+          published_age=$(git show HEAD:docs/status.json 2>/dev/null | python3 -c "
+import json, sys
+from datetime import datetime, timezone
+try:
+    stamp = json.load(sys.stdin).get('generated_at')
+    age = datetime.now(timezone.utc) - datetime.fromisoformat(stamp)
+    print(int(age.total_seconds() // 86400))
+except Exception:
+    print(999)
+" 2>/dev/null || echo 999)
+          echo "published status.json is ${published_age} day(s) old"
+
+          if [ "$prev" = "$curr" ] && [ "$weekday" != "1" ] && [ "$published_age" -lt 2 ]; then
+            echo "State unchanged ($curr), not the weekly heartbeat, status still fresh. Not committing."
             exit 0
           fi
 
-          if [ "$prev" = "$curr" ]; then
-            msg="chore: weekly detection heartbeat, state $curr [skip ci]"
-          else
+          if [ "$prev" != "$curr" ]; then
             msg="detection state change: $prev -> $curr [skip ci]"
+          elif [ "$published_age" -ge 2 ]; then
+            msg="chore: refresh published status, state $curr [skip ci]"
+          else
+            msg="chore: weekly detection heartbeat, state $curr [skip ci]"
           fi
 
-          git add reports/latest.md reports/latest.json
+          git add reports/latest.md reports/latest.json docs/status.json
           if git diff --cached --quiet; then
             echo "Nothing staged."
           else
