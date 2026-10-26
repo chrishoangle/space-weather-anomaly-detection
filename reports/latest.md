@@ -2,26 +2,26 @@
 
 **Status: NOMINAL**. No anomaly on the most recent sample
 
-_Generated 2026-10-25T11:23:46+00:00 by `scripts/run_daily_detection.py`._
+_Generated 2026-10-26T12:58:22+00:00 by `scripts/run_daily_detection.py`._
 
 | Field | Value |
 | --- | --- |
-| Newest sample | 2026-10-25T11:18:02+00:00 |
-| Data age | 0.1 h |
-| Samples scored | 2351 |
-| Samples flagged | 140 (5.9%) |
-| Latest Kp | 0.33 |
+| Newest sample | 2026-10-26T12:54:00+00:00 |
+| Data age | 0.07 h |
+| Samples scored | 2352 |
+| Samples flagged | 104 (4.4%) |
+| Latest Kp | 2.0 |
 | Storm class | quiet to unsettled |
 
 Peak |z| over the window:
 
 | Feature | Peak abs z-score |
 | --- | --- |
-| density | 6.51 |
-| speed | 2.7 |
-| temperature | 3.77 |
+| density | 26.66 |
+| speed | 3.92 |
+| temperature | 10.49 |
 
-> Scored 2351 samples; 140 flagged.
+> Scored 2352 samples; 104 flagged.
 
 ---
 
