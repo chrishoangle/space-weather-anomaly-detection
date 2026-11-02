@@ -17,8 +17,9 @@ detection of anomalous solar wind behavior enables mitigation.
 1. Ingest historical solar wind and geomagnetic data from NOAA SWPC / NASA
    OMNIWeb.
 2. Establish baseline behavior via statistical characterization.
-3. Apply anomaly detection methods (statistical process control today,
-   Isolation Forest / autoencoder later) to identify deviations.
+3. Apply anomaly detection methods (3σ statistical process control and
+   Isolation Forest, behind one shared detector interface) to identify
+   deviations.
 4. Validate detected anomalies against known geomagnetic storm events.
 5. Deploy an interactive dashboard for real-time monitoring.
 
@@ -38,7 +39,9 @@ detection of anomalous solar wind behavior enables mitigation.
 | Automated daily detection job | Done: `.github/workflows/daily.yml` |
 | Streamlit dashboard | Done: `app.py` |
 | Storm onset times for lead-time metrics | **Open**: `onset_utc` blank, so no lead-time results |
-| Evaluation across all five storm windows | **Open**: only March 2015 evaluated so far |
+| Evaluation across all five storm windows | Done: [`RESULTS.md`](RESULTS.md) section 4 |
+| Operating-point and held-out re-analysis | Done: [`RESULTS.md`](RESULTS.md) sections 4.6 to 4.8 |
+| Interactive site on GitHub Pages | Done: `docs/`, `scripts/export_web_data.py` |
 
 See [ROADMAP.md](ROADMAP.md) for the milestone plan and design decisions.
 
@@ -127,7 +130,7 @@ python -m pytest tests/ -v
 
 - Python (pandas, NumPy, scikit-learn)
 - Matplotlib / Plotly for visualization
-- Streamlit for the (planned) dashboard
+- Streamlit for the local dashboard, plus a static precomputed site under `docs/`
 - Pytest for unit tests
 
 ## Data Sources
@@ -139,20 +142,51 @@ python -m pytest tests/ -v
 ## Headline Result
 
 Across **all five catalogued storms** (3,696 hourly samples), every
-configuration detected every storm, so detection is not the discriminating
-problem. Restraint is. On restraint, **the 3σ statistical baseline beat
-Isolation Forest decisively**: precision 0.394 vs 0.254 and a quiet-time
+configuration detected every storm. Event recall is 1.000 across the board, so
+detection is not the discriminating problem. Restraint is.
+
+**The configuration with the highest recall was the worst detector.** Isolation
+Forest fitted on Kp < 3 rows posted recall 0.661, the best in the set, by
+flagging 1,172 of 3,696 hours, roughly a third of every month. Its precision,
+0.136, and its quiet-time false-alarm rate, 15.6%, are both the worst in the
+set. An evaluation reporting recall without a false-alarm counterpart would
+have ranked it first.
+
+On precision and quiet-time false alarms the 3σ statistical baseline led
+Isolation Forest in every window: precision 0.394 vs 0.254 and a quiet-time
 false-alarm rate of 2.4% vs 6.1%.
 
-The gap widens where the problem gets hard. In October 2003, a month with
-Kp ≥ 3 in 54% of its hours, Isolation Forest collapses to F1 0.062 while the
-baseline holds at 0.343. The reason is general: an unsupervised model that
-defines "anomalous" as "rare in training data" fails when the base rate shifts,
-which is exactly when a monitor matters most. The baseline is anchored to an
-explicit quiet reference and survives.
+**That comparison was not fair, and re-running it removed two thirds of the
+advantage.** The two detectors derive thresholds from incommensurable
+parameters, a sigma cut against a contamination fraction, so they were not
+flagging comparable numbers of hours, and precision rises automatically at a
+lower flag rate. With the baseline retuned per window to flag exactly as many
+hours as Isolation Forest, the mean precision gap falls from **+0.141
+(p = 0.013) to +0.048 (p = 0.306)**. The direction survives, the significance
+does not. A leave-one-storm-out protocol, which also removes the in-sample
+leakage, leaves the direction unchanged and still does not reach significance
+at five windows.
+
+Aggregate precision and false-alarm figures above are means across the five
+storm windows, matching the unit of analysis in the paired tests. Pooling over
+all hours instead gives slightly different values.
 
 Full numbers, per-window breakdown, and five stated limitations are in
-[RESULTS.md](RESULTS.md).
+[RESULTS.md](RESULTS.md). An interactive version is at
+[chrishoangle.github.io/space-weather-anomaly-detection](https://chrishoangle.github.io/space-weather-anomaly-detection/).
+
+### A hypothesis that did not hold
+
+October 2003 is the hardest window for every detector: the baseline degrades to
+F1 0.343 while Isolation Forest collapses to 0.062. That month had elevated
+geomagnetic activity in 54% of its hours, which suggests base-rate shift, since
+an unsupervised model that defines "anomalous" as "rare in training data" should
+fail when the base rate moves.
+
+Tested across all five windows, the data does not support it. The correlation
+between a window's disturbed fraction and the performance gap is Spearman
+r = -0.10, p = 0.87. The mechanism stays plausible but five windows cannot
+establish it, and it is not claimed here.
 
 ## Evaluation Approach
 
@@ -164,8 +198,9 @@ detection, so this project reports two families side by side:
 - **Point-wise**: each timestamp scored independently. Included because
   event-wise recall alone would reward a detector that fires constantly.
 
-Also reported: **quiet-time false-alarm rate** (detections during independently
-confirmed Kp < 3 periods) and **detection lead time** relative to storm onset.
+Also reported: **quiet-time false-alarm rate**, detections during
+independently confirmed Kp < 3 periods. Detection lead time is not yet
+measurable, because `onset_utc` in the storm catalog is still blank.
 
 Accuracy is deliberately never reported: with a ~5% positive class, a detector
 that flags nothing scores 95%.
